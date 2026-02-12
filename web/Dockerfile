@@ -6,7 +6,7 @@ ENV VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
 ENV VITE_PUBLIC_JOIN_BASE_URL=${VITE_PUBLIC_JOIN_BASE_URL}
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --include=dev
 
 COPY . .
 RUN npm run build
