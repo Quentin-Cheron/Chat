@@ -1,0 +1,67 @@
+@import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+    --color-background: #f6f2e8;
+    --color-foreground: #14182b;
+    --color-card: #fffdf7;
+    --color-card-foreground: #14182b;
+    --color-primary: #db3e1c;
+    --color-primary-foreground: #ffffff;
+    --color-muted: #e4e0d6;
+    --color-muted-foreground: #5f6582;
+    --color-accent: #1e6fa8;
+    --color-accent-foreground: #ffffff;
+    --color-border: #1e253a;
+    --font-display: "Archivo Black", sans-serif;
+    --font-body: "Manrope", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+    * {
+        border-color: var(--color-border);
+    }
+
+    body {
+        @apply bg-background text-foreground font-body antialiased;
+        background-image:
+            radial-gradient(
+                circle at 8% 8%,
+                rgba(255, 205, 167, 0.8) 0,
+                transparent 28%
+            ),
+            radial-gradient(
+                circle at 90% 12%,
+                rgba(168, 208, 255, 0.7) 0,
+                transparent 26%
+            ),
+            linear-gradient(
+                125deg,
+                rgba(246, 242, 232, 1) 0%,
+                rgba(234, 225, 207, 1) 100%
+            );
+        min-height: 100vh;
+    }
+}
+
+@layer utilities {
+    .grid-auto-fit {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .reveal {
+        animation: reveal 620ms ease both;
+    }
+}
+
+@keyframes reveal {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

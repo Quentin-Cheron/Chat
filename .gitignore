@@ -1,0 +1,7 @@
+.env
+backups/
+.DS_Store
+node_modules/
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/dist/

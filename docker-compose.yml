@@ -1,0 +1,96 @@
+services:
+  caddy:
+    image: caddy:2.8
+    container_name: privatechat-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        - VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
+        - VITE_PUBLIC_JOIN_BASE_URL=${VITE_PUBLIC_JOIN_BASE_URL}
+    image: privatechat-web:local
+    container_name: privatechat-web
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: privatechat-api:local
+    container_name: privatechat-api
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - APP_NAME=${APP_NAME}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - DOMAIN=${DOMAIN}
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - CONTROL_PLANE_URL=${CONTROL_PLANE_URL}
+      - INSTANCE_PUBLIC_URL=${INSTANCE_PUBLIC_URL}
+      - RESOLVER_REGISTER_TOKEN=${RESOLVER_REGISTER_TOKEN}
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: privatechat-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: privatechat-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  desktop-builder:
+    build:
+      context: ./desktop
+      dockerfile: Dockerfile.builder
+    image: privatechat-desktop-builder:local
+    container_name: privatechat-desktop-builder
+    profiles:
+      - desktop-build
+    environment:
+      - VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
+    working_dir: /workspace/desktop
+    volumes:
+      - ./:/workspace
+      - cargo_cache:/usr/local/cargo/registry
+      - rustup_cache:/usr/local/rustup
+    command: sh -lc "npm install && npm run tauri build"
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  cargo_cache:
+  rustup_cache:

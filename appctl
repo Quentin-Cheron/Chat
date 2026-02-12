@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CMD="${1:-help}"
+
+compose() {
+  docker compose "$@"
+}
+
+case "$CMD" in
+  status)
+    compose ps
+    ;;
+  logs)
+    SERVICE="${2:-}"
+    if [ -n "$SERVICE" ]; then
+      compose logs -f "$SERVICE"
+    else
+      compose logs -f --tail=150
+    fi
+    ;;
+  update)
+    compose pull
+    compose up -d
+    ;;
+  backup)
+    TS="$(date +%Y%m%d-%H%M%S)"
+    mkdir -p backups
+    docker exec privatechat-postgres pg_dump -U "${POSTGRES_USER:-privatechat}" "${POSTGRES_DB:-privatechat}" > "backups/db-${TS}.sql"
+    echo "Backup created: backups/db-${TS}.sql"
+    ;;
+  doctor)
+    echo "[doctor] docker"
+    docker --version
+    echo "[doctor] compose"
+    docker compose version
+    echo "[doctor] services"
+    compose ps
+    echo "[doctor] web"
+    curl -fsS "http://localhost" >/dev/null && echo "ok"
+    echo "[doctor] api"
+    curl -fsS "http://localhost/api/health" >/dev/null && echo "ok"
+    ;;
+  help|*)
+    cat <<USAGE
+Usage: ./appctl <command>
+
+Commands:
+  status           Show containers status
+  logs [service]   Follow logs (all or one service)
+  update           Pull images and restart services
+  backup           Dump PostgreSQL into ./backups
+  doctor           Run basic health checks
+USAGE
+    ;;
+esac
