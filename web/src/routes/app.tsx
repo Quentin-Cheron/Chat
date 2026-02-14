@@ -44,6 +44,45 @@ export const Route = createFileRoute("/app")({
   component: AppPage,
 });
 
+type VoiceIceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
+
+function getVoiceIceServers(): VoiceIceServer[] {
+  const stun = "stun:stun.l.google.com:19302";
+  const turnUrl = (import.meta.env.VITE_TURN_URL as string | undefined)?.trim();
+  const turnUsername = (import.meta.env.VITE_TURN_USERNAME as string | undefined)?.trim();
+  const turnPassword = (import.meta.env.VITE_TURN_PASSWORD as string | undefined)?.trim();
+
+  if (!turnUrl) {
+    return [{ urls: stun }];
+  }
+
+  const urls = turnUrl
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  if (!urls.length) {
+    return [{ urls: stun }];
+  }
+
+  if (!turnUsername || !turnPassword) {
+    return [{ urls: stun }, { urls }];
+  }
+
+  return [
+    { urls: stun },
+    {
+      urls,
+      username: turnUsername,
+      credential: turnPassword,
+    },
+  ];
+}
+
 function AppPage() {
   const { data: session, isPending } = authClient.useSession();
   const navigate = useNavigate();
@@ -195,6 +234,7 @@ function AppPage() {
     const socket: Socket = io("/ws", {
       withCredentials: true,
       transports: ["websocket"],
+      path: "/socket.io",
     });
     socketRef.current = socket;
 
@@ -537,7 +577,7 @@ function AppPage() {
     }
 
     const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: getVoiceIceServers(),
     });
 
     localStream.getTracks().forEach((track) => {
@@ -625,7 +665,14 @@ function AppPage() {
       setVoiceRoster({});
       setVoiceParticipants([]);
       setVoiceChannelId(channelId);
-      socketRef.current?.emit("join-voice", { channelId });
+      socketRef.current?.emit("join-voice", {
+        channelId,
+        user: {
+          id: session?.user?.id,
+          name: session?.user?.name || "User",
+          email: session?.user?.email || "",
+        },
+      });
     } catch (error) {
       setVoiceError(humanizeVoiceError(error));
     }
@@ -950,21 +997,30 @@ function AppPage() {
                       </span>
                     </div>
                   ) : null}
-                  {Object.entries(voiceRoster).map(([peerId, peer]) => (
-                    <div
-                      key={peerId}
-                      className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
-                        peer.speaking
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                          : "border-[#d3dae6] bg-white text-slate-700"
-                      }`}
-                    >
-                      <span className="font-semibold">{peer.name || peer.email}</span>
-                      <span className="uppercase tracking-wide">
-                        {peer.speaking ? "parle" : "silence"}
-                      </span>
-                    </div>
-                  ))}
+                  {voiceParticipants.map((peerId) => {
+                    const peer = voiceRoster[peerId] || {
+                      name: `Participant ${peerId.slice(0, 6)}`,
+                      email: "",
+                      speaking: false,
+                    };
+                    return (
+                      <div
+                        key={peerId}
+                        className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
+                          peer.speaking
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                            : "border-[#d3dae6] bg-white text-slate-700"
+                        }`}
+                      >
+                        <span className="font-semibold">
+                          {peer.name || peer.email}
+                        </span>
+                        <span className="uppercase tracking-wide">
+                          {peer.speaking ? "parle" : "silence"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
                 {voiceError ? (
                   <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">

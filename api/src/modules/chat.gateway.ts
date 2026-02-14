@@ -90,12 +90,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage("join-voice")
   joinVoice(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { channelId: string },
+    @MessageBody()
+    payload: {
+      channelId: string;
+      user?: {
+        id?: string;
+        name?: string;
+        email?: string;
+      };
+    },
   ): void {
     if (!payload?.channelId) {
       return;
     }
     const room = `voice:${payload.channelId}`;
+    const knownUser = this.socketUsers.get(client.id);
+    if (payload?.user) {
+      this.socketUsers.set(client.id, {
+        socketId: client.id,
+        userId: payload.user.id || knownUser?.userId || client.id,
+        name: payload.user.name || knownUser?.name || "User",
+        email: payload.user.email || knownUser?.email || "",
+        speaking: knownUser?.speaking ?? false,
+      });
+    } else if (!knownUser) {
+      this.socketUsers.set(client.id, {
+        socketId: client.id,
+        userId: client.id,
+        name: "User",
+        email: "",
+        speaking: false,
+      });
+    }
     const peers = Array.from(
       this.server.sockets.adapter.rooms.get(room) ?? [],
     ).filter((id) => id !== client.id);

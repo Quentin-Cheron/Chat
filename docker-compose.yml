@@ -26,6 +26,9 @@ services:
       args:
         - VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
         - VITE_PUBLIC_JOIN_BASE_URL=${VITE_PUBLIC_JOIN_BASE_URL}
+        - VITE_TURN_URL=${VITE_TURN_URL}
+        - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
+        - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
     image: privatechat-web:local
     container_name: privatechat-web
     restart: unless-stopped
