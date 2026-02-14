@@ -28,6 +28,13 @@ type CreateMessageInput = {
   content: string;
 };
 
+type UpdateMemberRoleInput = {
+  workspaceId: string;
+  actorUserId: string;
+  memberId: string;
+  role: MemberRole;
+};
+
 @Injectable()
 export class WorkspaceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -247,6 +254,67 @@ export class WorkspaceService {
             id: true,
             name: true,
             email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async listMembers(workspaceId: string, userId: string) {
+    await this.assertMember(workspaceId, userId);
+    return this.prisma.member.findMany({
+      where: { workspaceId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  async updateMemberRole(input: UpdateMemberRoleInput) {
+    if (![MemberRole.ADMIN, MemberRole.MEMBER].includes(input.role)) {
+      throw new BadRequestException('Only ADMIN or MEMBER roles can be assigned.');
+    }
+
+    const actor = await this.assertMember(input.workspaceId, input.actorUserId, [MemberRole.OWNER, MemberRole.ADMIN]);
+    const target = await this.prisma.member.findUnique({
+      where: { id: input.memberId },
+    });
+
+    if (!target || target.workspaceId !== input.workspaceId) {
+      throw new NotFoundException('Member not found.');
+    }
+    if (target.role === MemberRole.OWNER) {
+      throw new ForbiddenException('Owner role cannot be changed.');
+    }
+    if (target.userId === actor.userId) {
+      throw new ForbiddenException('You cannot change your own role.');
+    }
+
+    // Admins can only moderate MEMBER roles.
+    if (actor.role === MemberRole.ADMIN && target.role !== MemberRole.MEMBER) {
+      throw new ForbiddenException('Admins can only change MEMBER roles.');
+    }
+
+    return this.prisma.member.update({
+      where: { id: input.memberId },
+      data: { role: input.role },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            createdAt: true,
           },
         },
       },

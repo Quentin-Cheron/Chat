@@ -8,7 +8,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { ChannelType } from '@prisma/client';
+import { ChannelType, MemberRole } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { requireUserSession } from './auth-session';
 import { ChatGateway } from './chat.gateway';
@@ -99,5 +99,27 @@ export class WorkspaceController {
     });
     this.chatGateway.emitNewMessage(channelId, message);
     return message;
+  }
+
+  @Get('workspaces/:workspaceId/members')
+  async listMembers(@Req() req: FastifyRequest, @Param('workspaceId') workspaceId: string) {
+    const user = await requireUserSession(req);
+    return this.workspaceService.listMembers(workspaceId, user.id);
+  }
+
+  @Post('workspaces/:workspaceId/members/:memberId/role')
+  async updateMemberRole(
+    @Req() req: FastifyRequest,
+    @Param('workspaceId') workspaceId: string,
+    @Param('memberId') memberId: string,
+    @Body() body: { role: MemberRole },
+  ) {
+    const user = await requireUserSession(req);
+    return this.workspaceService.updateMemberRole({
+      workspaceId,
+      actorUserId: user.id,
+      memberId,
+      role: body.role,
+    });
   }
 }

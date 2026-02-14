@@ -68,6 +68,31 @@ export type ChannelPayload = {
   updatedAt: string;
 };
 
+export type WorkspaceMemberPayload = {
+  id: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  workspaceId: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    image?: string | null;
+    createdAt: string;
+  };
+};
+
+export type UserProfilePayload = {
+  id: string;
+  email: string;
+  name: string;
+  image?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MessagePayload = {
   id: string;
   channelId: string;
@@ -195,6 +220,26 @@ export async function changePassword(params: { currentPassword: string; newPassw
   }
 }
 
+export function getProfile(): Promise<UserProfilePayload> {
+  return request<UserProfilePayload>("/api/auth/profile");
+}
+
+export async function updateProfile(params: { name: string; image?: string | null }): Promise<UserProfilePayload> {
+  const response = await fetch("/api/auth/profile", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  return response.json() as Promise<UserProfilePayload>;
+}
+
 export function listWorkspaces(): Promise<WorkspaceMembership[]> {
   return request<WorkspaceMembership[]>("/api/workspaces");
 }
@@ -226,6 +271,25 @@ export async function createChannel(workspaceId: string, name: string): Promise<
       "content-type": "application/json",
     },
     body: JSON.stringify({ name, type: "TEXT" }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+}
+
+export function listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberPayload[]> {
+  return request<WorkspaceMemberPayload[]>(`/api/workspaces/${workspaceId}/members`);
+}
+
+export async function updateWorkspaceMemberRole(workspaceId: string, memberId: string, role: "ADMIN" | "MEMBER"): Promise<void> {
+  const response = await fetch(`/api/workspaces/${workspaceId}/members/${memberId}/role`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ role }),
   });
   if (!response.ok) {
     const text = await response.text();

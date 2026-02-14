@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { io, type Socket } from 'socket.io-client';
-import { Hash, MessageSquare, Plus, Send, Shield, Users } from 'lucide-react';
+import { Crown, Hash, MessageSquare, Plus, Send, Shield, ShieldCheck, Users } from 'lucide-react';
 import { authClient } from '@/lib/auth-client';
 import {
   createChannel,
@@ -12,10 +12,12 @@ import {
   getPasswordStatus,
   joinInvite,
   listChannels,
+  listWorkspaceMembers,
   listMessages,
   listWorkspaces,
   getShareInviteLink,
   sendMessage,
+  updateWorkspaceMemberRole,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -97,6 +99,12 @@ function AppPage() {
     enabled: Boolean(selectedChannelId),
   });
 
+  const membersQuery = useQuery({
+    queryKey: ['workspace-members', selectedWorkspaceId],
+    queryFn: () => listWorkspaceMembers(selectedWorkspaceId),
+    enabled: Boolean(selectedWorkspaceId),
+  });
+
   const passwordStatusQuery = useQuery({
     queryKey: ['password-status'],
     queryFn: getPasswordStatus,
@@ -174,6 +182,14 @@ function AppPage() {
     },
   });
 
+  const updateMemberRoleMutation = useMutation({
+    mutationFn: ({ memberId, role }: { memberId: string; role: 'ADMIN' | 'MEMBER' }) =>
+      updateWorkspaceMemberRole(selectedWorkspaceId, memberId, role),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['workspace-members', selectedWorkspaceId] });
+    },
+  });
+
   const latestError = useMemo(() => {
     return (
       createWorkspaceMutation.error ||
@@ -181,9 +197,11 @@ function AppPage() {
       createInviteMutation.error ||
       joinInviteMutation.error ||
       sendMessageMutation.error ||
+      updateMemberRoleMutation.error ||
       workspacesQuery.error ||
       channelsQuery.error ||
-      messagesQuery.error
+      messagesQuery.error ||
+      membersQuery.error
     );
   }, [
     createWorkspaceMutation.error,
@@ -191,10 +209,14 @@ function AppPage() {
     createInviteMutation.error,
     joinInviteMutation.error,
     sendMessageMutation.error,
+    updateMemberRoleMutation.error,
     workspacesQuery.error,
     channelsQuery.error,
     messagesQuery.error,
+    membersQuery.error,
   ]);
+
+  const canModerateRoles = selectedWorkspaceMembership?.role === 'OWNER' || selectedWorkspaceMembership?.role === 'ADMIN';
 
   function onCreateWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -266,7 +288,7 @@ function AppPage() {
         </aside>
 
         <aside className="border-r border-[#d7deea] bg-[#f3f6fb] p-3">
-          <h2 className="mb-3 truncate text-sm font-semibold text-slate-900">{selectedWorkspaceMembership?.workspace.name || 'Workspace'}</h2>
+          <h2 className="mb-3 truncate text-sm font-semibold text-slate-900">{selectedWorkspaceMembership?.workspace.name || 'Groupe'}</h2>
           <div className="space-y-1">
             {(channelsQuery.data || []).map((channel) => (
               <button
@@ -413,6 +435,52 @@ function AppPage() {
               Role: {selectedWorkspaceMembership?.role || '-'}
             </p>
             <p className="mt-1">Channel actif: {selectedChannel?.slug || '-'}</p>
+          </div>
+
+          <div className="mt-4 rounded-md border border-[#d3dae6] bg-white p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Membres du groupe</p>
+            <div className="mt-2 space-y-2">
+              {(membersQuery.data || []).map((member) => (
+                <div key={member.id} className="rounded-md border border-[#e2e8f2] p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-slate-900">{member.user.name}</p>
+                      <p className="truncate text-[11px] text-slate-500">{member.user.email}</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                      {member.role === 'OWNER' ? <Crown className="h-3.5 w-3.5 text-amber-500" /> : null}
+                      {member.role === 'ADMIN' ? <ShieldCheck className="h-3.5 w-3.5 text-[#2f4f73]" /> : null}
+                      {member.role}
+                    </div>
+                  </div>
+                  {canModerateRoles && member.role !== 'OWNER' && member.userId !== session.user.id ? (
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 hover:bg-[#edf2f9]"
+                        disabled={updateMemberRoleMutation.isPending || member.role === 'ADMIN'}
+                        onClick={() => updateMemberRoleMutation.mutate({ memberId: member.id, role: 'ADMIN' })}
+                      >
+                        Promouvoir admin
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 hover:bg-[#edf2f9]"
+                        disabled={updateMemberRoleMutation.isPending || member.role === 'MEMBER'}
+                        onClick={() => updateMemberRoleMutation.mutate({ memberId: member.id, role: 'MEMBER' })}
+                      >
+                        Mettre membre
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {!membersQuery.data?.length ? <p className="text-[11px] text-slate-500">Aucun membre dans ce groupe.</p> : null}
+            </div>
           </div>
 
           {latestError ? <p className="mt-3 rounded border border-red-300 bg-red-50 p-2 text-xs text-red-700">{String((latestError as Error).message || latestError)}</p> : null}

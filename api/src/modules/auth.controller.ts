@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
 import { auth } from '../auth';
@@ -119,6 +119,48 @@ export class AuthController {
     return {
       mustChangePassword: row?.mustChangePassword ?? false,
     };
+  }
+
+  @Get('profile')
+  async profile(@Req() req: FastifyRequest) {
+    const user = await requireUserSession(req);
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        image: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return dbUser;
+  }
+
+  @Post('profile')
+  async updateProfile(@Req() req: FastifyRequest, @Body() body: { name?: string; image?: string | null }) {
+    const user = await requireUserSession(req);
+    const name = body?.name?.trim?.();
+    if (!name || name.length < 2) {
+      throw new BadRequestException('Name must contain at least 2 characters.');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name,
+        image: body?.image || null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        image: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return updated;
   }
 
   @Post('change-password')
