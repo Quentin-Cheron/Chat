@@ -43,6 +43,9 @@ ask_inputs() {
   VITE_TURN_URL="${VITE_TURN_URL:-}"
   VITE_TURN_USERNAME="${VITE_TURN_USERNAME:-}"
   VITE_TURN_PASSWORD="${VITE_TURN_PASSWORD:-}"
+  MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-}"
+  MEDIASOUP_MIN_PORT="${MEDIASOUP_MIN_PORT:-40000}"
+  MEDIASOUP_MAX_PORT="${MEDIASOUP_MAX_PORT:-40100}"
 
   case "$INSTALL_ROLE" in
     instance|resolver|standalone) ;;
@@ -84,6 +87,9 @@ ask_inputs() {
   fi
   if [ -z "$INSTANCE_PUBLIC_URL" ]; then
     INSTANCE_PUBLIC_URL="https://$DOMAIN"
+  fi
+  if [ -z "$MEDIASOUP_ANNOUNCED_IP" ]; then
+    MEDIASOUP_ANNOUNCED_IP="$DOMAIN"
   fi
   if [ -z "$RESOLVER_REGISTER_TOKEN" ]; then
     RESOLVER_REGISTER_TOKEN="$(openssl rand -hex 24)"
@@ -141,6 +147,8 @@ setup_firewall() {
   ufw allow 22/tcp >/dev/null || true
   ufw allow 80/tcp >/dev/null || true
   ufw allow 443/tcp >/dev/null || true
+  ufw allow "${MEDIASOUP_MIN_PORT}:${MEDIASOUP_MAX_PORT}/udp" >/dev/null || true
+  ufw allow "${MEDIASOUP_MIN_PORT}:${MEDIASOUP_MAX_PORT}/tcp" >/dev/null || true
   ufw --force enable >/dev/null || true
 }
 
@@ -195,6 +203,9 @@ VITE_PUBLIC_JOIN_BASE_URL=$VITE_PUBLIC_JOIN_BASE_URL
 VITE_TURN_URL=$VITE_TURN_URL
 VITE_TURN_USERNAME=$VITE_TURN_USERNAME
 VITE_TURN_PASSWORD=$VITE_TURN_PASSWORD
+MEDIASOUP_ANNOUNCED_IP=$MEDIASOUP_ANNOUNCED_IP
+MEDIASOUP_MIN_PORT=$MEDIASOUP_MIN_PORT
+MEDIASOUP_MAX_PORT=$MEDIASOUP_MAX_PORT
 NODE_ENV=production
 ENV
 }

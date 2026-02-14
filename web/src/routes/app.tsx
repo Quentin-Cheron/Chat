@@ -38,50 +38,19 @@ import {
   Volume2,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Device } from "mediasoup-client";
 import { io, type Socket } from "socket.io-client";
 
 export const Route = createFileRoute("/app")({
   component: AppPage,
 });
 
-type VoiceIceServer = {
-  urls: string | string[];
-  username?: string;
-  credential?: string;
+type TransportParams = {
+  id: string;
+  iceParameters: Record<string, unknown>;
+  iceCandidates: Array<Record<string, unknown>>;
+  dtlsParameters: Record<string, unknown>;
 };
-
-function getVoiceIceServers(): VoiceIceServer[] {
-  const stun = "stun:stun.l.google.com:19302";
-  const turnUrl = (import.meta.env.VITE_TURN_URL as string | undefined)?.trim();
-  const turnUsername = (import.meta.env.VITE_TURN_USERNAME as string | undefined)?.trim();
-  const turnPassword = (import.meta.env.VITE_TURN_PASSWORD as string | undefined)?.trim();
-
-  if (!turnUrl) {
-    return [{ urls: stun }];
-  }
-
-  const urls = turnUrl
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
-
-  if (!urls.length) {
-    return [{ urls: stun }];
-  }
-
-  if (!turnUsername || !turnPassword) {
-    return [{ urls: stun }, { urls }];
-  }
-
-  return [
-    { urls: stun },
-    {
-      urls,
-      username: turnUsername,
-      credential: turnPassword,
-    },
-  ];
-}
 
 function AppPage() {
   const { data: session, isPending } = authClient.useSession();
@@ -111,7 +80,12 @@ function AppPage() {
 
   const socketRef = useRef<Socket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const deviceRef = useRef<Device | null>(null);
+  const sendTransportRef = useRef<ReturnType<Device["createSendTransport"]> | null>(null);
+  const recvTransportRef = useRef<ReturnType<Device["createRecvTransport"]> | null>(null);
+  const producerIdRef = useRef<string | null>(null);
+  const consumedProducerIdsRef = useRef<Set<string>>(new Set());
+  const pendingProducerIdsRef = useRef<Set<string>>(new Set());
   const remoteAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const speakingContextRef = useRef<AudioContext | null>(null);
   const speakingLoopRef = useRef<number | null>(null);
@@ -244,7 +218,7 @@ function AppPage() {
 
     socket.on(
       "voice-presence",
-      async (payload: {
+      (payload: {
         channelId: string;
         participants: Array<{
           peerId: string;
@@ -270,119 +244,36 @@ function AppPage() {
         });
         setVoiceParticipants(peers);
         setVoiceRoster(roster);
-
-        if (!voiceChannelIdRef.current) return;
-        const stream = await ensureLocalAudioStream();
-        for (const peerId of peers) {
-          const shouldInitiate = socket.id < peerId;
-          if (shouldInitiate) {
-            await createPeerConnection(payload.channelId, peerId, stream, true);
-          } else {
-            await createPeerConnection(payload.channelId, peerId, stream, false);
-          }
-        }
       },
     );
 
     socket.on(
-      "voice-peers",
-      async (payload: {
-        channelId: string;
-        peers: string[];
-        users?: Array<{ socketId: string; name: string; email: string; speaking?: boolean }>;
-      }) => {
-        if (!payload?.channelId || !Array.isArray(payload.peers)) return;
-        const roster: Record<string, { name: string; email: string; speaking: boolean }> = {};
-        (payload.users || []).forEach((user) => {
-          roster[user.socketId] = {
-            name: user.name,
-            email: user.email,
-            speaking: Boolean(user.speaking),
-          };
-        });
-        setVoiceRoster(roster);
-        setVoiceParticipants(payload.peers);
-        const stream = await ensureLocalAudioStream();
-        for (const peerId of payload.peers) {
-          const shouldInitiate = socket.id < peerId;
-          await createPeerConnection(
-            payload.channelId,
-            peerId,
-            stream,
-            shouldInitiate,
-          );
+      "voice-new-producer",
+      async (payload: { channelId: string; producerId: string; peerId: string }) => {
+        if (!payload?.channelId || payload.channelId !== voiceChannelIdRef.current) {
+          return;
         }
-      },
-    );
-
-    socket.on("voice-peer-joined", (payload: { peerId: string; user?: { name: string; email: string } | null }) => {
-      if (!payload?.peerId) return;
-      setVoiceParticipants((prev) => (prev.includes(payload.peerId) ? prev : [...prev, payload.peerId]));
-      if (payload.user) {
-        setVoiceRoster((prev) => ({
-          ...prev,
-          [payload.peerId]: {
-            name: payload.user?.name || "User",
-            email: payload.user?.email || "",
-            speaking: false,
-          },
-        }));
-      }
-    });
-
-    socket.on(
-      "voice-signal",
-      async (payload: {
-        channelId: string;
-        fromId: string;
-        description?: RTCSessionDescriptionInit;
-        candidate?: RTCIceCandidateInit;
-      }) => {
-        if (!payload?.channelId || !payload?.fromId) return;
-        const stream = await ensureLocalAudioStream();
-        const peer = await createPeerConnection(
-          payload.channelId,
-          payload.fromId,
-          stream,
-          false,
-        );
-        if (payload.description) {
-          await peer.setRemoteDescription(
-            new RTCSessionDescription(payload.description),
-          );
-          if (payload.description.type === "offer") {
-            const answer = await peer.createAnswer();
-            await peer.setLocalDescription(answer);
-            socketRef.current?.emit("voice-signal", {
-              channelId: payload.channelId,
-              targetId: payload.fromId,
-              description: answer,
-            });
-          }
+        if (!recvTransportRef.current || !deviceRef.current) {
+          pendingProducerIdsRef.current.add(payload.producerId);
+          return;
         }
-        if (payload.candidate) {
-          try {
-            await peer.addIceCandidate(new RTCIceCandidate(payload.candidate));
-          } catch {
-            // Can happen transiently when remote description is not set yet.
-          }
+        if (consumedProducerIdsRef.current.has(payload.producerId)) {
+          return;
         }
+        await consumeProducer(payload.channelId, payload.producerId);
       },
     );
 
     socket.on("voice-peer-left", (payload: { peerId: string }) => {
       const peerId = payload?.peerId;
       if (!peerId) return;
-      const existing = peerConnectionsRef.current.get(peerId);
-      existing?.close();
-      peerConnectionsRef.current.delete(peerId);
-      setVoiceParticipants((prev) => prev.filter((id) => id !== peerId));
       const audio = remoteAudioRef.current.get(peerId);
       if (audio) {
         audio.pause();
         audio.srcObject = null;
         remoteAudioRef.current.delete(peerId);
       }
+      setVoiceParticipants((prev) => prev.filter((id) => id !== peerId));
       setVoiceRoster((prev) => {
         const next = { ...prev };
         delete next[peerId];
@@ -405,6 +296,7 @@ function AppPage() {
     });
 
     return () => {
+      socket.off("voice-new-producer");
       socket.off("voice-presence");
       socket.disconnect();
       socketRef.current = null;
@@ -543,6 +435,77 @@ function AppPage() {
     selectedWorkspaceMembership?.role === "OWNER" ||
     selectedWorkspaceMembership?.role === "ADMIN";
 
+  type VoiceRequestPayload =
+    | {
+        action: "join";
+        data: {
+          channelId: string;
+          user: { id?: string; name?: string; email?: string };
+        };
+      }
+    | {
+        action: "leave";
+        data: { channelId: string };
+      }
+    | {
+        action: "createTransport";
+        data: { channelId: string };
+      }
+    | {
+        action: "connectTransport";
+        data: {
+          channelId: string;
+          transportId: string;
+          dtlsParameters: Record<string, unknown>;
+        };
+      }
+    | {
+        action: "produce";
+        data: {
+          channelId: string;
+          transportId: string;
+          kind: "audio";
+          rtpParameters: Record<string, unknown>;
+        };
+      }
+    | {
+        action: "consume";
+        data: {
+          channelId: string;
+          transportId: string;
+          producerId: string;
+          rtpCapabilities: Record<string, unknown>;
+        };
+      }
+    | {
+        action: "setSpeaking";
+        data: {
+          channelId: string;
+          speaking: boolean;
+        };
+      };
+
+  async function voiceRequest<T>(payload: VoiceRequestPayload): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const socket = socketRef.current;
+      if (!socket) {
+        reject(new Error("socket-not-connected"));
+        return;
+      }
+      socket.emit(
+        "voice:req",
+        payload,
+        (response: { ok: boolean; data?: T; error?: string }) => {
+          if (response?.ok) {
+            resolve(response.data as T);
+            return;
+          }
+          reject(new Error(response?.error || "voice-request-failed"));
+        },
+      );
+    });
+  }
+
   async function ensureLocalAudioStream(): Promise<MediaStream> {
     if (localStreamRef.current) {
       return localStreamRef.current;
@@ -586,10 +549,10 @@ function AppPage() {
           lastSpeakingRef.current = speaking;
           setLocalSpeaking(speaking);
           if (voiceChannelIdRef.current) {
-            socketRef.current?.emit("voice-speaking", {
-              channelId: voiceChannelIdRef.current,
-              speaking,
-            });
+            void voiceRequest<{ ok: boolean }>({
+              action: "setSpeaking",
+              data: { channelId: voiceChannelIdRef.current, speaking },
+            }).catch(() => undefined);
           }
         }
         speakingLoopRef.current = requestAnimationFrame(tick);
@@ -614,93 +577,145 @@ function AppPage() {
     setLocalSpeaking(false);
   }
 
-  async function createPeerConnection(
-    channelId: string,
-    peerId: string,
-    localStream: MediaStream,
-    initiator: boolean,
-  ): Promise<RTCPeerConnection> {
-    const existing = peerConnectionsRef.current.get(peerId);
-    if (existing) {
-      return existing;
+  async function consumeProducer(channelId: string, producerId: string): Promise<void> {
+    if (!deviceRef.current || !recvTransportRef.current) {
+      return;
+    }
+    if (consumedProducerIdsRef.current.has(producerId)) {
+      return;
     }
 
-    const peer = new RTCPeerConnection({
-      iceServers: getVoiceIceServers(),
+    const consumerInfo = await voiceRequest<{
+      id: string;
+      producerId: string;
+      kind: "audio";
+      rtpParameters: Record<string, unknown>;
+      peerId: string;
+    }>({
+      action: "consume",
+      data: {
+        channelId,
+        transportId: recvTransportRef.current.id,
+        producerId,
+        rtpCapabilities: deviceRef.current.rtpCapabilities,
+      },
     });
 
-    localStream.getTracks().forEach((track) => {
-      peer.addTrack(track, localStream);
+    const consumer = await recvTransportRef.current.consume({
+      id: consumerInfo.id,
+      producerId: consumerInfo.producerId,
+      kind: consumerInfo.kind,
+      rtpParameters: consumerInfo.rtpParameters,
     });
 
-    peer.onicecandidate = (event) => {
-      if (!event.candidate) return;
-      socketRef.current?.emit("voice-signal", {
+    consumedProducerIdsRef.current.add(producerId);
+
+    const stream = new MediaStream([consumer.track]);
+    let audio = remoteAudioRef.current.get(consumerInfo.peerId);
+    if (!audio) {
+      audio = new Audio();
+      audio.autoplay = true;
+      remoteAudioRef.current.set(consumerInfo.peerId, audio);
+    }
+    audio.srcObject = stream;
+    const audioSettings = readAudioSettings();
+    if (audioSettings.outputDeviceId && "setSinkId" in audio) {
+      void (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
+        .setSinkId(audioSettings.outputDeviceId)
+        .catch(() => undefined);
+    }
+    void audio.play().catch(() => undefined);
+  }
+
+  async function setupMediasoupVoice(channelId: string, stream: MediaStream): Promise<void> {
+    const joinResponse = await voiceRequest<{
+      channelId: string;
+      rtpCapabilities: Record<string, unknown>;
+      producers: Array<{ producerId: string; peerId: string }>;
+    }>({
+      action: "join",
+      data: {
         channelId,
-        targetId: peerId,
-        candidate: event.candidate.toJSON(),
-      });
-    };
+        user: {
+          id: session?.user?.id,
+          name: session?.user?.name || "User",
+          email: session?.user?.email || "",
+        },
+      },
+    });
 
-    peer.ontrack = (event) => {
-      const [stream] = event.streams;
-      if (!stream) return;
-      let audio = remoteAudioRef.current.get(peerId);
-      if (!audio) {
-        audio = new Audio();
-        audio.autoplay = true;
-        remoteAudioRef.current.set(peerId, audio);
-      }
-      audio.srcObject = stream;
-      const audioSettings = readAudioSettings();
-      if (audioSettings.outputDeviceId && "setSinkId" in audio) {
-        void (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
-          .setSinkId(audioSettings.outputDeviceId)
-          .catch(() => undefined);
-      }
-      void audio.play().catch(() => {
-        // Browser autoplay policies may require user interaction first.
-      });
-    };
+    const device = new Device();
+    await device.load({ routerRtpCapabilities: joinResponse.rtpCapabilities });
+    deviceRef.current = device;
 
-    peer.onconnectionstatechange = () => {
-      if (
-        peer.connectionState === "disconnected" ||
-        peer.connectionState === "failed" ||
-        peer.connectionState === "closed"
-      ) {
-        peerConnectionsRef.current.delete(peerId);
-        setVoiceParticipants((prev) => prev.filter((id) => id !== peerId));
-        const audio = remoteAudioRef.current.get(peerId);
-        if (audio) {
-          audio.pause();
-          audio.srcObject = null;
-          remoteAudioRef.current.delete(peerId);
-        }
-        setVoiceRoster((prev) => {
-          const next = { ...prev };
-          delete next[peerId];
-          return next;
-        });
-      }
-    };
+    const sendParams = await voiceRequest<TransportParams>({
+      action: "createTransport",
+      data: { channelId },
+    });
 
-    peerConnectionsRef.current.set(peerId, peer);
-    setVoiceParticipants((prev) =>
-      prev.includes(peerId) ? prev : [...prev, peerId],
-    );
+    const sendTransport = device.createSendTransport(sendParams);
+    sendTransport.on("connect", ({ dtlsParameters }, callback, errback) => {
+      voiceRequest<{ connected: boolean }>({
+        action: "connectTransport",
+        data: {
+          channelId,
+          transportId: sendTransport.id,
+          dtlsParameters,
+        },
+      })
+        .then(() => callback())
+        .catch((error) => errback(error as Error));
+    });
+    sendTransport.on("produce", ({ rtpParameters }, callback, errback) => {
+      voiceRequest<{ id: string }>({
+        action: "produce",
+        data: {
+          channelId,
+          transportId: sendTransport.id,
+          kind: "audio",
+          rtpParameters,
+        },
+      })
+        .then((data) => callback({ id: data.id }))
+        .catch((error) => errback(error as Error));
+    });
+    sendTransportRef.current = sendTransport;
 
-    if (initiator) {
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
-      socketRef.current?.emit("voice-signal", {
-        channelId,
-        targetId: peerId,
-        description: offer,
-      });
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) {
+      const producer = await sendTransport.produce({ track: audioTrack });
+      producerIdRef.current = producer.id;
     }
 
-    return peer;
+    const recvParams = await voiceRequest<TransportParams>({
+      action: "createTransport",
+      data: { channelId },
+    });
+
+    const recvTransport = device.createRecvTransport(recvParams);
+    recvTransport.on("connect", ({ dtlsParameters }, callback, errback) => {
+      voiceRequest<{ connected: boolean }>({
+        action: "connectTransport",
+        data: {
+          channelId,
+          transportId: recvTransport.id,
+          dtlsParameters,
+        },
+      })
+        .then(() => callback())
+        .catch((error) => errback(error as Error));
+    });
+    recvTransportRef.current = recvTransport;
+
+    for (const producer of joinResponse.producers) {
+      await consumeProducer(channelId, producer.producerId);
+    }
+    if (pendingProducerIdsRef.current.size) {
+      for (const producerId of Array.from(pendingProducerIdsRef.current)) {
+        await consumeProducer(channelId, producerId);
+      }
+      pendingProducerIdsRef.current.clear();
+    }
   }
 
   async function joinVoiceChannel(channelId: string) {
@@ -710,18 +725,11 @@ function AppPage() {
     try {
       setVoiceError(null);
       await leaveVoiceChannel();
-      await ensureLocalAudioStream();
+      const stream = await ensureLocalAudioStream();
       setVoiceRoster({});
       setVoiceParticipants([]);
       setVoiceChannelId(channelId);
-      socketRef.current?.emit("join-voice", {
-        channelId,
-        user: {
-          id: session?.user?.id,
-          name: session?.user?.name || "User",
-          email: session?.user?.email || "",
-        },
-      });
+      await setupMediasoupVoice(channelId, stream);
     } catch (error) {
       setVoiceError(humanizeVoiceError(error));
     }
@@ -729,17 +737,28 @@ function AppPage() {
 
   async function leaveVoiceChannel() {
     if (voiceChannelId) {
-      socketRef.current?.emit("voice-speaking", {
-        channelId: voiceChannelId,
-        speaking: false,
-      });
-      socketRef.current?.emit("leave-voice", { channelId: voiceChannelId });
+      try {
+        await voiceRequest<{ ok: boolean }>({
+          action: "setSpeaking",
+          data: { channelId: voiceChannelId, speaking: false },
+        });
+        await voiceRequest<{ channelId: string }>({
+          action: "leave",
+          data: { channelId: voiceChannelId },
+        });
+      } catch {
+        // ignore if socket already disconnected
+      }
     }
 
-    for (const [, peer] of peerConnectionsRef.current) {
-      peer.close();
-    }
-    peerConnectionsRef.current.clear();
+    sendTransportRef.current?.close();
+    recvTransportRef.current?.close();
+    sendTransportRef.current = null;
+    recvTransportRef.current = null;
+    deviceRef.current = null;
+    producerIdRef.current = null;
+    consumedProducerIdsRef.current = new Set();
+    pendingProducerIdsRef.current = new Set();
     for (const [, audio] of remoteAudioRef.current) {
       audio.pause();
       audio.srcObject = null;
@@ -765,10 +784,10 @@ function AppPage() {
     if (!next && voiceChannelId) {
       setLocalSpeaking(false);
       lastSpeakingRef.current = false;
-      socketRef.current?.emit("voice-speaking", {
-        channelId: voiceChannelId,
-        speaking: false,
-      });
+      void voiceRequest<{ ok: boolean }>({
+        action: "setSpeaking",
+        data: { channelId: voiceChannelId, speaking: false },
+      }).catch(() => undefined);
     }
   }
 
