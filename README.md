@@ -71,6 +71,15 @@ Puis ouvre: `http://localhost`.
 - `web/`: projet frontend séparé (React + Vite)
 - `desktop/`: client desktop (Tauri + React)
 
+## Coolify
+
+Sur Coolify, deploye avec le `docker-compose.yml` du repo:
+
+- le service `caddy` est dans le profil `selfhost` et ne demarre pas par defaut
+- configure Coolify pour router le domaine vers le service `web` sur le port `80`
+
+Ainsi, tu n'as pas de montage `infra/caddy/Caddyfile` cote Coolify.
+
 ## Invitations directes (mode recommande)
 
 Chaque instance partage un lien direct:

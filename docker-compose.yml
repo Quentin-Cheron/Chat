@@ -2,6 +2,8 @@ services:
   caddy:
     image: caddy:2.8
     container_name: privatechat-caddy
+    profiles:
+      - selfhost
     restart: unless-stopped
     ports:
       - "80:80"
@@ -27,6 +29,8 @@ services:
     image: privatechat-web:local
     container_name: privatechat-web
     restart: unless-stopped
+    expose:
+      - "80"
 
   api:
     build:

@@ -189,7 +189,7 @@ ENV
 deploy_stack() {
   log "Déploiement stack docker"
   cd "$APP_DIR"
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile selfhost up -d --build
 }
 
 health_check() {
