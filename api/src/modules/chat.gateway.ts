@@ -33,6 +33,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly voiceMembership = new Map<string, Set<string>>();
   private readonly socketUsers = new Map<string, VoiceUser>();
 
+  private emitVoicePresence(channelId: string): void {
+    const room = `voice:${channelId}`;
+    const socketIds = Array.from(this.server.sockets.adapter.rooms.get(room) ?? []);
+    const participants = socketIds.map((peerId) => {
+      const user = this.socketUsers.get(peerId);
+      return {
+        peerId,
+        name: user?.name || "User",
+        email: user?.email || "",
+        speaking: Boolean(user?.speaking),
+      };
+    });
+    this.server.to(room).emit("voice-presence", { channelId, participants });
+  }
+
   async handleConnection(client: Socket): Promise<void> {
     try {
       const session = await auth.api.getSession({
@@ -60,6 +75,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     for (const room of rooms) {
       client.to(room).emit("voice-peer-left", { peerId: client.id });
+      const channelId = room.replace("voice:", "");
+      this.emitVoicePresence(channelId);
     }
     this.voiceMembership.delete(client.id);
     this.socketUsers.delete(client.id);
@@ -147,6 +164,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       peerId: client.id,
       user: me || null,
     });
+    this.emitVoicePresence(payload.channelId);
   }
 
   @SubscribeMessage("leave-voice")
@@ -165,6 +183,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       channelId: payload.channelId,
       peerId: client.id,
     });
+    this.emitVoicePresence(payload.channelId);
   }
 
   @SubscribeMessage("voice-speaking")
@@ -190,6 +209,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       peerId: client.id,
       speaking: Boolean(payload.speaking),
     });
+    this.emitVoicePresence(payload.channelId);
   }
 
   @SubscribeMessage("voice-signal")

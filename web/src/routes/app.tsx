@@ -243,6 +243,48 @@ function AppPage() {
     });
 
     socket.on(
+      "voice-presence",
+      async (payload: {
+        channelId: string;
+        participants: Array<{
+          peerId: string;
+          name?: string;
+          email?: string;
+          speaking?: boolean;
+        }>;
+      }) => {
+        if (!payload?.channelId || !Array.isArray(payload.participants)) return;
+        if (payload.channelId !== voiceChannelIdRef.current) return;
+        const me = socket.id;
+        const peers = payload.participants
+          .map((p) => p.peerId)
+          .filter((peerId) => peerId && peerId !== me);
+        const roster: Record<string, { name: string; email: string; speaking: boolean }> = {};
+        payload.participants.forEach((p) => {
+          if (!p.peerId || p.peerId === me) return;
+          roster[p.peerId] = {
+            name: p.name || "User",
+            email: p.email || "",
+            speaking: Boolean(p.speaking),
+          };
+        });
+        setVoiceParticipants(peers);
+        setVoiceRoster(roster);
+
+        if (!voiceChannelIdRef.current) return;
+        const stream = await ensureLocalAudioStream();
+        for (const peerId of peers) {
+          const shouldInitiate = socket.id < peerId;
+          if (shouldInitiate) {
+            await createPeerConnection(payload.channelId, peerId, stream, true);
+          } else {
+            await createPeerConnection(payload.channelId, peerId, stream, false);
+          }
+        }
+      },
+    );
+
+    socket.on(
       "voice-peers",
       async (payload: {
         channelId: string;
@@ -262,7 +304,13 @@ function AppPage() {
         setVoiceParticipants(payload.peers);
         const stream = await ensureLocalAudioStream();
         for (const peerId of payload.peers) {
-          await createPeerConnection(payload.channelId, peerId, stream, true);
+          const shouldInitiate = socket.id < peerId;
+          await createPeerConnection(
+            payload.channelId,
+            peerId,
+            stream,
+            shouldInitiate,
+          );
         }
       },
     );
@@ -357,6 +405,7 @@ function AppPage() {
     });
 
     return () => {
+      socket.off("voice-presence");
       socket.disconnect();
       socketRef.current = null;
     };
