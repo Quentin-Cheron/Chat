@@ -100,6 +100,8 @@ model Workspace {
   id        String   @id @default(cuid())
   name      String
   ownerId   String
+  allowMemberChannelCreation Boolean @default(true)
+  allowMemberInviteCreation  Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

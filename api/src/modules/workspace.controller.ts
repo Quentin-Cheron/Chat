@@ -57,6 +57,22 @@ export class WorkspaceController {
     });
   }
 
+  @Get('workspaces/:workspaceId/settings')
+  async getWorkspaceSettings(@Req() req: FastifyRequest, @Param('workspaceId') workspaceId: string) {
+    const user = await requireUserSession(req);
+    return this.workspaceService.getWorkspaceSettings(workspaceId, user.id);
+  }
+
+  @Post('workspaces/:workspaceId/settings')
+  async updateWorkspaceSettings(
+    @Req() req: FastifyRequest,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { allowMemberChannelCreation?: boolean; allowMemberInviteCreation?: boolean },
+  ) {
+    const user = await requireUserSession(req);
+    return this.workspaceService.updateWorkspaceSettings(workspaceId, user.id, body);
+  }
+
   @Post('workspaces/:workspaceId/invites')
   async createInvite(
     @Req() req: FastifyRequest,

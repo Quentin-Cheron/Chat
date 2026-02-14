@@ -10,6 +10,7 @@ import {
   createWorkspace,
   getResolverJoinLink,
   getPasswordStatus,
+  getWorkspaceSettings,
   joinInvite,
   listChannels,
   listWorkspaceMembers,
@@ -17,6 +18,7 @@ import {
   listWorkspaces,
   getShareInviteLink,
   sendMessage,
+  updateWorkspaceSettings,
   updateWorkspaceMemberRole,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -111,6 +113,12 @@ function AppPage() {
     enabled: Boolean(session?.user),
   });
 
+  const workspaceSettingsQuery = useQuery({
+    queryKey: ['workspace-settings', selectedWorkspaceId],
+    queryFn: () => getWorkspaceSettings(selectedWorkspaceId),
+    enabled: Boolean(selectedWorkspaceId),
+  });
+
   useEffect(() => {
     if (!session?.user) return;
     if (passwordStatusQuery.data?.mustChangePassword) {
@@ -190,6 +198,14 @@ function AppPage() {
     },
   });
 
+  const updateWorkspaceSettingsMutation = useMutation({
+    mutationFn: (payload: { allowMemberChannelCreation?: boolean; allowMemberInviteCreation?: boolean }) =>
+      updateWorkspaceSettings(selectedWorkspaceId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['workspace-settings', selectedWorkspaceId] });
+    },
+  });
+
   const latestError = useMemo(() => {
     return (
       createWorkspaceMutation.error ||
@@ -198,9 +214,11 @@ function AppPage() {
       joinInviteMutation.error ||
       sendMessageMutation.error ||
       updateMemberRoleMutation.error ||
+      updateWorkspaceSettingsMutation.error ||
       workspacesQuery.error ||
       channelsQuery.error ||
       messagesQuery.error ||
+      workspaceSettingsQuery.error ||
       membersQuery.error
     );
   }, [
@@ -210,9 +228,11 @@ function AppPage() {
     joinInviteMutation.error,
     sendMessageMutation.error,
     updateMemberRoleMutation.error,
+    updateWorkspaceSettingsMutation.error,
     workspacesQuery.error,
     channelsQuery.error,
     messagesQuery.error,
+    workspaceSettingsQuery.error,
     membersQuery.error,
   ]);
 
@@ -315,6 +335,7 @@ function AppPage() {
               type="submit"
               variant="outline"
               size="sm"
+              disabled={selectedWorkspaceMembership?.role === 'MEMBER' && !workspaceSettingsQuery.data?.allowMemberChannelCreation}
               className="h-9 border-[#c7d3e4] bg-white px-2 text-slate-700 hover:bg-[#edf2f9]"
             >
               <Plus className="h-3 w-3" />
@@ -409,6 +430,7 @@ function AppPage() {
             <Button
               onClick={() => createInviteMutation.mutate(selectedWorkspaceId)}
               size="sm"
+              disabled={selectedWorkspaceMembership?.role === 'MEMBER' && !workspaceSettingsQuery.data?.allowMemberInviteCreation}
               className="mt-3 h-10 w-full border-[#2f4f73] bg-[#2f4f73] text-xs text-white hover:bg-[#274566]"
             >
               Generer lien d'invitation
@@ -437,6 +459,36 @@ function AppPage() {
             <p className="mt-1">Channel actif: {selectedChannel?.slug || '-'}</p>
           </div>
 
+          <div className="mt-4 rounded-md border border-[#d3dae6] bg-white p-3 text-xs text-slate-700">
+            <p className="font-semibold text-slate-900">Permissions du groupe</p>
+            <label className="mt-2 flex items-center justify-between gap-3 text-[12px]">
+              Membres peuvent creer des channels
+              <input
+                type="checkbox"
+                disabled={!canModerateRoles || updateWorkspaceSettingsMutation.isPending}
+                checked={workspaceSettingsQuery.data?.allowMemberChannelCreation ?? true}
+                onChange={(event) =>
+                  updateWorkspaceSettingsMutation.mutate({
+                    allowMemberChannelCreation: event.target.checked,
+                  })
+                }
+              />
+            </label>
+            <label className="mt-2 flex items-center justify-between gap-3 text-[12px]">
+              Membres peuvent creer des invitations
+              <input
+                type="checkbox"
+                disabled={!canModerateRoles || updateWorkspaceSettingsMutation.isPending}
+                checked={workspaceSettingsQuery.data?.allowMemberInviteCreation ?? false}
+                onChange={(event) =>
+                  updateWorkspaceSettingsMutation.mutate({
+                    allowMemberInviteCreation: event.target.checked,
+                  })
+                }
+              />
+            </label>
+          </div>
+
           <div className="mt-4 rounded-md border border-[#d3dae6] bg-white p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Membres du groupe</p>
             <div className="mt-2 space-y-2">
@@ -454,27 +506,20 @@ function AppPage() {
                     </div>
                   </div>
                   {canModerateRoles && member.role !== 'OWNER' && member.userId !== session.user.id ? (
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 hover:bg-[#edf2f9]"
-                        disabled={updateMemberRoleMutation.isPending || member.role === 'ADMIN'}
-                        onClick={() => updateMemberRoleMutation.mutate({ memberId: member.id, role: 'ADMIN' })}
+                    <div className="mt-2">
+                      <select
+                        value={member.role}
+                        disabled={updateMemberRoleMutation.isPending}
+                        className="h-7 w-full rounded border border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 outline-none"
+                        onChange={(event) => {
+                          const role = event.target.value as 'ADMIN' | 'MEMBER';
+                          if (role === member.role) return;
+                          updateMemberRoleMutation.mutate({ memberId: member.id, role });
+                        }}
                       >
-                        Promouvoir admin
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 hover:bg-[#edf2f9]"
-                        disabled={updateMemberRoleMutation.isPending || member.role === 'MEMBER'}
-                        onClick={() => updateMemberRoleMutation.mutate({ memberId: member.id, role: 'MEMBER' })}
-                      >
-                        Mettre membre
-                      </Button>
+                        <option value="MEMBER">member</option>
+                        <option value="ADMIN">admin</option>
+                      </select>
                     </div>
                   ) : null}
                 </div>

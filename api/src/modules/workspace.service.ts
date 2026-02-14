@@ -35,6 +35,14 @@ type UpdateMemberRoleInput = {
   role: MemberRole;
 };
 
+type WorkspaceAction = 'channel:create' | 'invite:create' | 'member:role:update';
+
+const rolePermissions: Record<MemberRole, WorkspaceAction[]> = {
+  OWNER: ['channel:create', 'invite:create', 'member:role:update'],
+  ADMIN: ['channel:create', 'invite:create', 'member:role:update'],
+  MEMBER: ['channel:create'],
+};
+
 @Injectable()
 export class WorkspaceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -91,7 +99,18 @@ export class WorkspaceService {
   }
 
   async createInvite(input: CreateInviteInput) {
-    await this.assertMember(input.workspaceId, input.userId, [MemberRole.OWNER, MemberRole.ADMIN]);
+    const actor = await this.assertMember(input.workspaceId, input.userId);
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: input.workspaceId },
+      select: { allowMemberInviteCreation: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found.');
+    }
+    this.assertPermission(actor.role, 'invite:create');
+    if (actor.role === MemberRole.MEMBER && !workspace.allowMemberInviteCreation) {
+      throw new ForbiddenException('Members cannot create invites in this workspace.');
+    }
 
     const code = randomBytes(6).toString('base64url');
     const expiresAt = input.expiresInHours
@@ -169,7 +188,18 @@ export class WorkspaceService {
   }
 
   async createChannel(input: CreateChannelInput) {
-    await this.assertMember(input.workspaceId, input.userId, [MemberRole.OWNER, MemberRole.ADMIN]);
+    const actor = await this.assertMember(input.workspaceId, input.userId);
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: input.workspaceId },
+      select: { allowMemberChannelCreation: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found.');
+    }
+    this.assertPermission(actor.role, 'channel:create');
+    if (actor.role === MemberRole.MEMBER && !workspace.allowMemberChannelCreation) {
+      throw new ForbiddenException('Members cannot create channels in this workspace.');
+    }
 
     const cleanName = input.name.trim().toLowerCase();
     if (cleanName.length < 2) {
@@ -280,11 +310,13 @@ export class WorkspaceService {
   }
 
   async updateMemberRole(input: UpdateMemberRoleInput) {
+    const actor = await this.assertMember(input.workspaceId, input.actorUserId);
+    this.assertPermission(actor.role, 'member:role:update');
+
     if (input.role !== MemberRole.ADMIN && input.role !== MemberRole.MEMBER) {
       throw new BadRequestException('Only ADMIN or MEMBER roles can be assigned.');
     }
 
-    const actor = await this.assertMember(input.workspaceId, input.actorUserId, [MemberRole.OWNER, MemberRole.ADMIN]);
     const target = await this.prisma.member.findUnique({
       where: { id: input.memberId },
     });
@@ -321,6 +353,46 @@ export class WorkspaceService {
     });
   }
 
+  async getWorkspaceSettings(workspaceId: string, userId: string) {
+    await this.assertMember(workspaceId, userId);
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        id: true,
+        allowMemberChannelCreation: true,
+        allowMemberInviteCreation: true,
+      },
+    });
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found.');
+    }
+    return workspace;
+  }
+
+  async updateWorkspaceSettings(
+    workspaceId: string,
+    userId: string,
+    input: { allowMemberChannelCreation?: boolean; allowMemberInviteCreation?: boolean },
+  ) {
+    await this.assertMember(workspaceId, userId, [MemberRole.OWNER, MemberRole.ADMIN]);
+    return this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        ...(typeof input.allowMemberChannelCreation === 'boolean'
+          ? { allowMemberChannelCreation: input.allowMemberChannelCreation }
+          : {}),
+        ...(typeof input.allowMemberInviteCreation === 'boolean'
+          ? { allowMemberInviteCreation: input.allowMemberInviteCreation }
+          : {}),
+      },
+      select: {
+        id: true,
+        allowMemberChannelCreation: true,
+        allowMemberInviteCreation: true,
+      },
+    });
+  }
+
   private async assertMember(workspaceId: string, userId: string, allowedRoles?: MemberRole[]) {
     const member = await this.prisma.member.findUnique({
       where: {
@@ -340,6 +412,13 @@ export class WorkspaceService {
     }
 
     return member;
+  }
+
+  private assertPermission(role: MemberRole, action: WorkspaceAction) {
+    const actions = rolePermissions[role] || [];
+    if (!actions.includes(action)) {
+      throw new ForbiddenException('Insufficient permissions.');
+    }
   }
 
   private async registerInviteRouteIfEnabled(code: string, expiresAt: Date | null) {

@@ -57,6 +57,12 @@ export type WorkspaceMembership = {
   };
 };
 
+export type WorkspaceSettingsPayload = {
+  id: string;
+  allowMemberChannelCreation: boolean;
+  allowMemberInviteCreation: boolean;
+};
+
 export type ChannelPayload = {
   id: string;
   workspaceId: string;
@@ -261,6 +267,29 @@ export async function createWorkspace(name: string): Promise<void> {
 
 export function listChannels(workspaceId: string): Promise<ChannelPayload[]> {
   return request<ChannelPayload[]>(`/api/workspaces/${workspaceId}/channels`);
+}
+
+export function getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettingsPayload> {
+  return request<WorkspaceSettingsPayload>(`/api/workspaces/${workspaceId}/settings`);
+}
+
+export async function updateWorkspaceSettings(
+  workspaceId: string,
+  params: { allowMemberChannelCreation?: boolean; allowMemberInviteCreation?: boolean },
+): Promise<WorkspaceSettingsPayload> {
+  const response = await fetch(`/api/workspaces/${workspaceId}/settings`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  return response.json() as Promise<WorkspaceSettingsPayload>;
 }
 
 export async function createChannel(workspaceId: string, name: string): Promise<void> {
