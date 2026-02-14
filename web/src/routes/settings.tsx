@@ -264,6 +264,9 @@ function SettingsPage() {
     const updated = writeAudioSettings({
       inputDeviceId: next.inputDeviceId ?? audioSettings.inputDeviceId,
       outputDeviceId: next.outputDeviceId ?? audioSettings.outputDeviceId,
+      echoCancellation: audioSettings.echoCancellation,
+      noiseSuppression: audioSettings.noiseSuppression,
+      autoGainControl: audioSettings.autoGainControl,
     });
     setAudioSettings(updated);
   }

@@ -178,3 +178,37 @@ Un invité saisit le code sur `/join`, puis est redirigé vers `/invite/:code` s
 ./appctl backup
 ./appctl doctor
 ```
+
+## Troubleshooting micro (web/desktop)
+
+Si le micro ne fonctionne pas correctement:
+
+1. Ouvrir un canal vocal puis cliquer `Refresh devices`.
+2. Verifier `Input device` et `Output device` (laisser `System default` si doute).
+3. Autoriser le micro dans:
+   - Navigateur (permission du site)
+   - Systeme (macOS/Windows/Linux privacy settings)
+4. Si erreur "in use", fermer les apps qui capturent deja le micro (Zoom, Meet, OBS, etc.).
+5. Activer/desactiver les options:
+   - `Echo cancellation`
+   - `Noise suppression`
+   - `Auto gain control`
+6. Lancer `Start loopback` pour verifier localement l'entree/sortie audio.
+7. Ouvrir `Show diagnostics` pour lire les erreurs WebRTC/device.
+8. Sur Safari/Chrome, recharger la page apres avoir accorde la permission micro.
+
+## Checklist de test (desktop + mobile)
+
+- [ ] Install one-command intact: `curl .../install.sh | bash` puis app accessible.
+- [ ] Workspace onboarding visible sur compte neuf (creation workspace + dismiss).
+- [ ] Navigation claire: workspace > channels > voice > DMs.
+- [ ] Mobile: menu gauche ouvrable/fermable, boutons tactiles >= taille confortable.
+- [ ] Skeleton loading visible pendant chargement channels/messages.
+- [ ] Empty states explicites pour messages, channels, DMs, onboarding.
+- [ ] Voice join/leave stable sans fuite de pistes audio.
+- [ ] Mute/deafen fonctionnels (local + remote audio mute expected).
+- [ ] Input/output device picker applique les changements en call actif.
+- [ ] Device unplug/replug (`devicechange`) reinitialise correctement la piste micro.
+- [ ] `Echo cancellation`, `Noise suppression`, `Auto gain control` reconfigurables et persistes.
+- [ ] Mic meter et loopback test operationnels.
+- [ ] Diagnostics panel renseigne les erreurs permission/not found/in use.

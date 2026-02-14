@@ -19,22 +19,34 @@ import {
   updateWorkspaceSettings,
 } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { readAudioSettings } from "@/lib/audio-settings";
+import {
+  readAudioSettings,
+  writeAudioSettings,
+  type AudioSettings,
+} from "@/lib/audio-settings";
 import { useAppStore } from "@/store/app-store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+  AudioLines,
   Crown,
   Hash,
+  Headphones,
+  Loader2,
+  Menu,
   MessageSquare,
   Mic,
   MicOff,
+  MonitorUp,
+  PanelLeftClose,
   PhoneCall,
   Plus,
+  RefreshCw,
   Send,
   Shield,
   ShieldCheck,
   Users,
+  VolumeX,
   Volume2,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -42,6 +54,20 @@ import { Device } from "mediasoup-client";
 import { io, type Socket } from "socket.io-client";
 
 export const Route = createFileRoute("/app")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    workspace:
+      typeof search.workspace === "string" && search.workspace.trim()
+        ? search.workspace
+        : undefined,
+    channel:
+      typeof search.channel === "string" && search.channel.trim()
+        ? search.channel
+        : undefined,
+    voice:
+      typeof search.voice === "string" && search.voice.trim()
+        ? search.voice
+        : undefined,
+  }),
   component: AppPage,
 });
 
@@ -55,6 +81,7 @@ type TransportParams = {
 function AppPage() {
   const { data: session, isPending } = authClient.useSession();
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const queryClient = useQueryClient();
 
   const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
@@ -74,15 +101,35 @@ function AppPage() {
   const [voiceChannelId, setVoiceChannelId] = useState("");
   const [voiceParticipants, setVoiceParticipants] = useState<string[]>([]);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [deafened, setDeafened] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceRoster, setVoiceRoster] = useState<Record<string, { name: string; email: string; speaking: boolean }>>({});
   const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => readAudioSettings());
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const [loopbackTesting, setLoopbackTesting] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [showMobileNav, setShowMobileNav] = useState(false);
+  const [selectedDmUserId, setSelectedDmUserId] = useState("");
+  const [voiceJoining, setVoiceJoining] = useState(false);
+  const [showDiagPanel, setShowDiagPanel] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem("privatechat_onboarding_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const socketRef = useRef<Socket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const loopbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const deviceRef = useRef<Device | null>(null);
   const sendTransportRef = useRef<ReturnType<Device["createSendTransport"]> | null>(null);
   const recvTransportRef = useRef<ReturnType<Device["createRecvTransport"]> | null>(null);
+  const producerRef = useRef<{ close: () => void; replaceTrack: (options: { track: MediaStreamTrack }) => Promise<void> } | null>(null);
   const producerIdRef = useRef<string | null>(null);
   const consumedProducerIdsRef = useRef<Set<string>>(new Set());
   const pendingProducerIdsRef = useRef<Set<string>>(new Set());
@@ -105,6 +152,16 @@ function AppPage() {
       ) || null,
     [workspacesQuery.data, selectedWorkspaceId],
   );
+  function logDiagnostic(message: string) {
+    const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+    setDiagnostics((prev) => [line, ...prev].slice(0, 40));
+  }
+
+  function persistAudioSettings(next: AudioSettings) {
+    const saved = writeAudioSettings(next);
+    setAudioSettings(saved);
+    return saved;
+  }
 
   useEffect(() => {
     if (!workspacesQuery.data?.length) {
@@ -113,18 +170,29 @@ function AppPage() {
       return;
     }
 
+    const workspaceFromSearch =
+      search.workspace &&
+      workspacesQuery.data.some((w) => w.workspace.id === search.workspace)
+        ? search.workspace
+        : "";
+
+    if (workspaceFromSearch && workspaceFromSearch !== selectedWorkspaceId) {
+      setSelectedWorkspaceId(workspaceFromSearch);
+      return;
+    }
+
     if (
       !selectedWorkspaceId ||
       !workspacesQuery.data.some((w) => w.workspace.id === selectedWorkspaceId)
     ) {
       setSelectedWorkspaceId(workspacesQuery.data[0].workspace.id);
-      resetChannelSelection();
     }
   }, [
     workspacesQuery.data,
     selectedWorkspaceId,
     setSelectedWorkspaceId,
     resetChannelSelection,
+    search.workspace,
   ]);
 
   const channelsQuery = useQuery({
@@ -139,6 +207,14 @@ function AppPage() {
       null,
     [channelsQuery.data, selectedChannelId],
   );
+  const textChannels = useMemo(
+    () => (channelsQuery.data || []).filter((channel) => channel.type === "TEXT"),
+    [channelsQuery.data],
+  );
+  const voiceChannels = useMemo(
+    () => (channelsQuery.data || []).filter((channel) => channel.type === "VOICE"),
+    [channelsQuery.data],
+  );
 
   useEffect(() => {
     if (!channelsQuery.data?.length) {
@@ -146,13 +222,32 @@ function AppPage() {
       return;
     }
 
+    const channelFromSearch =
+      search.channel &&
+      channelsQuery.data.some((c) => c.id === search.channel)
+        ? search.channel
+        : "";
+
+    if (channelFromSearch && channelFromSearch !== selectedChannelId) {
+      setSelectedDmUserId("");
+      setSelectedChannelId(channelFromSearch);
+      return;
+    }
+
     if (
-      !selectedChannelId ||
-      !channelsQuery.data.some((c) => c.id === selectedChannelId)
+      !selectedDmUserId &&
+      (!selectedChannelId ||
+        !channelsQuery.data.some((c) => c.id === selectedChannelId))
     ) {
       setSelectedChannelId(channelsQuery.data[0].id);
     }
-  }, [channelsQuery.data, selectedChannelId, setSelectedChannelId]);
+  }, [
+    channelsQuery.data,
+    selectedChannelId,
+    selectedDmUserId,
+    setSelectedChannelId,
+    search.channel,
+  ]);
 
   useEffect(() => {
     if (!voiceChannelId || !channelsQuery.data) return;
@@ -166,8 +261,111 @@ function AppPage() {
   }, [channelsQuery.data, voiceChannelId]);
 
   useEffect(() => {
+    if (!session?.user) return;
+    const nextWorkspace = selectedWorkspaceId || undefined;
+    const nextChannel = selectedChannelId || undefined;
+    const nextVoice = voiceChannelId || undefined;
+    if (
+      search.workspace === nextWorkspace &&
+      search.channel === nextChannel &&
+      search.voice === nextVoice
+    ) {
+      return;
+    }
+    void navigate({
+      to: "/app",
+      replace: true,
+      search: (prev) => ({
+        ...prev,
+        workspace: nextWorkspace,
+        channel: nextChannel,
+        voice: nextVoice,
+      }),
+    });
+  }, [
+    navigate,
+    search.channel,
+    search.voice,
+    search.workspace,
+    selectedChannelId,
+    selectedWorkspaceId,
+    session?.user,
+    voiceChannelId,
+  ]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "privatechat_onboarding_dismissed",
+        onboardingDismissed ? "1" : "0",
+      );
+    } catch {
+      // ignore storage failures
+    }
+  }, [onboardingDismissed]);
+
+  useEffect(() => {
     voiceChannelIdRef.current = voiceChannelId;
   }, [voiceChannelId]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    if (!search.voice) return;
+    if (!socketRef.current) return;
+    if (voiceChannelId === search.voice) return;
+    if (!channelsQuery.data?.length) return;
+    const voiceTarget = channelsQuery.data.find(
+      (channel) => channel.id === search.voice && channel.type === "VOICE",
+    );
+    if (!voiceTarget) return;
+    void joinVoiceChannel(voiceTarget.id);
+  }, [channelsQuery.data, search.voice, session?.user, voiceChannelId]);
+
+  useEffect(() => {
+    void refreshDevices();
+    if (!navigator.mediaDevices) return;
+    const onDeviceChange = () => {
+      logDiagnostic("Changement detecte dans les peripheriques audio.");
+      void refreshDevices();
+      if (voiceChannelIdRef.current) {
+        void replaceOutgoingTrack("device-change").catch((error) => {
+          setVoiceError(humanizeVoiceError(error));
+        });
+      }
+    };
+    navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void applyOutputDeviceToRemoteAudio(audioSettings.outputDeviceId);
+    if (loopbackAudioRef.current && "setSinkId" in loopbackAudioRef.current) {
+      void (
+        loopbackAudioRef.current as HTMLAudioElement & {
+          setSinkId(id: string): Promise<void>;
+        }
+      )
+        .setSinkId(audioSettings.outputDeviceId || "")
+        .catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioSettings.outputDeviceId]);
+
+  useEffect(() => {
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = micEnabled && !deafened;
+    });
+    if (!micEnabled && voiceChannelIdRef.current) {
+      void voiceRequest<{ ok: boolean }>({
+        action: "setSpeaking",
+        data: { channelId: voiceChannelIdRef.current, speaking: false },
+      }).catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micEnabled, deafened]);
 
   const messagesQuery = useQuery({
     queryKey: ["messages", selectedChannelId],
@@ -180,6 +378,17 @@ function AppPage() {
     queryFn: () => listWorkspaceMembers(selectedWorkspaceId),
     enabled: Boolean(selectedWorkspaceId),
   });
+  const dmMembers = useMemo(
+    () =>
+      (membersQuery.data || []).filter(
+        (member) => member.userId !== session?.user?.id,
+      ),
+    [membersQuery.data, session?.user?.id],
+  );
+  const selectedDmMember = useMemo(
+    () => dmMembers.find((member) => member.userId === selectedDmUserId) || null,
+    [dmMembers, selectedDmUserId],
+  );
 
   const passwordStatusQuery = useQuery({
     queryKey: ["password-status"],
@@ -506,22 +715,129 @@ function AppPage() {
     });
   }
 
-  async function ensureLocalAudioStream(): Promise<MediaStream> {
-    if (localStreamRef.current) {
-      return localStreamRef.current;
-    }
-    const audioSettings = readAudioSettings();
-    const constraints: MediaStreamConstraints = {
-      audio: audioSettings.inputDeviceId
-        ? { deviceId: { exact: audioSettings.inputDeviceId } }
-        : true,
+  function buildAudioConstraints(
+    settings: AudioSettings,
+    mode: "exact" | "ideal" | "default",
+  ): MediaTrackConstraints {
+    const base: MediaTrackConstraints = {
+      echoCancellation: settings.echoCancellation,
+      noiseSuppression: settings.noiseSuppression,
+      autoGainControl: settings.autoGainControl,
+      channelCount: 1,
+      sampleRate: { ideal: 48000 },
     };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (!settings.inputDeviceId || mode === "default") {
+      return base;
+    }
+    if (mode === "exact") {
+      return { ...base, deviceId: { exact: settings.inputDeviceId } };
+    }
+    return { ...base, deviceId: { ideal: settings.inputDeviceId } };
+  }
+
+  async function refreshDevices(forcePermission = false) {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      logDiagnostic("enumerateDevices non supporte sur ce navigateur.");
+      return;
+    }
+    try {
+      if (
+        forcePermission &&
+        navigator.mediaDevices.getUserMedia &&
+        !inputDevices.some((d) => d.label)
+      ) {
+        const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tmp.getTracks().forEach((track) => track.stop());
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === "audioinput");
+      const outputs = devices.filter((d) => d.kind === "audiooutput");
+      setInputDevices(inputs);
+      setOutputDevices(outputs);
+      logDiagnostic(
+        `Peripheriques audio detectes: ${inputs.length} entree(s), ${outputs.length} sortie(s).`,
+      );
+
+      if (
+        audioSettings.inputDeviceId &&
+        !inputs.some((d) => d.deviceId === audioSettings.inputDeviceId)
+      ) {
+        persistAudioSettings({ ...audioSettings, inputDeviceId: "" });
+        logDiagnostic("Micro selectionne indisponible, retour au peripherique par defaut.");
+      }
+      if (
+        audioSettings.outputDeviceId &&
+        !outputs.some((d) => d.deviceId === audioSettings.outputDeviceId)
+      ) {
+        persistAudioSettings({ ...audioSettings, outputDeviceId: "" });
+        logDiagnostic("Sortie selectionnee indisponible, retour a la sortie par defaut.");
+      }
+    } catch (error) {
+      logDiagnostic(`Echec enumerateDevices: ${String((error as Error)?.message || error)}`);
+    }
+  }
+
+  async function applyOutputDeviceToRemoteAudio(outputDeviceId: string) {
+    for (const [, audio] of remoteAudioRef.current) {
+      if (!("setSinkId" in audio)) continue;
+      try {
+        await (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(
+          outputDeviceId || "",
+        );
+      } catch {
+        logDiagnostic("Impossible d'appliquer la sortie audio au flux distant.");
+      }
+    }
+  }
+
+  async function acquireMicStream(settings: AudioSettings): Promise<MediaStream> {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("media-devices-unsupported");
+    }
+    const attempts: Array<MediaTrackConstraints> = [
+      buildAudioConstraints(settings, "exact"),
+      buildAudioConstraints(settings, "ideal"),
+      buildAudioConstraints(settings, "default"),
+    ];
+    let lastError: unknown = null;
+    for (let i = 0; i < attempts.length; i += 1) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: attempts[i],
+        });
+        logDiagnostic(`Micro acquis (tentative ${i + 1}/${attempts.length}).`);
+        return stream;
+      } catch (error) {
+        lastError = error;
+        logDiagnostic(
+          `Echec getUserMedia tentative ${i + 1}: ${
+            error instanceof DOMException ? `${error.name}` : String(error)
+          }`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 180));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("audio-capture-failed");
+  }
+
+  function attachLocalStream(stream: MediaStream) {
+    const previous = localStreamRef.current;
+    if (previous && previous !== stream) {
+      previous.getTracks().forEach((track) => track.stop());
+    }
     stream.getAudioTracks().forEach((track) => {
-      track.enabled = micEnabled;
+      track.enabled = micEnabled && !deafened;
     });
     localStreamRef.current = stream;
     startLocalSpeakingDetection(stream);
+  }
+
+  async function ensureLocalAudioStream(forceReacquire = false): Promise<MediaStream> {
+    if (!forceReacquire && localStreamRef.current) {
+      return localStreamRef.current;
+    }
+    const stream = await acquireMicStream(audioSettings);
+    attachLocalStream(stream);
     return stream;
   }
 
@@ -544,7 +860,8 @@ function AppPage() {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / data.length);
-        const speaking = micEnabled && rms > 0.035;
+        const speaking = micEnabled && !deafened && rms > 0.035;
+        setMicLevel(Math.min(100, Math.round(rms * 220)));
         if (speaking !== lastSpeakingRef.current) {
           lastSpeakingRef.current = speaking;
           setLocalSpeaking(speaking);
@@ -573,8 +890,30 @@ function AppPage() {
       void speakingContextRef.current.close();
       speakingContextRef.current = null;
     }
+    setMicLevel(0);
     lastSpeakingRef.current = false;
     setLocalSpeaking(false);
+  }
+
+  async function replaceOutgoingTrack(reason: string) {
+    if (!voiceChannelIdRef.current || !sendTransportRef.current) return;
+    const stream = await ensureLocalAudioStream(true);
+    const nextTrack = stream.getAudioTracks()[0];
+    if (!nextTrack) {
+      throw new Error("no-audio-track");
+    }
+    if (producerRef.current) {
+      await producerRef.current.replaceTrack({ track: nextTrack });
+      logDiagnostic(`Piste micro remplacee (${reason}).`);
+      return;
+    }
+    const producer = await sendTransportRef.current.produce({ track: nextTrack });
+    producerRef.current = producer as unknown as {
+      close: () => void;
+      replaceTrack: (options: { track: MediaStreamTrack }) => Promise<void>;
+    };
+    producerIdRef.current = producer.id;
+    logDiagnostic(`Producer audio recree (${reason}).`);
   }
 
   async function consumeProducer(channelId: string, producerId: string): Promise<void> {
@@ -618,12 +957,12 @@ function AppPage() {
       remoteAudioRef.current.set(consumerInfo.peerId, audio);
     }
     audio.srcObject = stream;
-    const audioSettings = readAudioSettings();
     if (audioSettings.outputDeviceId && "setSinkId" in audio) {
       void (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
         .setSinkId(audioSettings.outputDeviceId)
         .catch(() => undefined);
     }
+    audio.muted = deafened;
     void audio.play().catch(() => undefined);
   }
 
@@ -685,6 +1024,10 @@ function AppPage() {
     if (audioTrack) {
       const producer = await sendTransport.produce({ track: audioTrack });
       producerIdRef.current = producer.id;
+      producerRef.current = producer as unknown as {
+        close: () => void;
+        replaceTrack: (options: { track: MediaStreamTrack }) => Promise<void>;
+      };
     }
 
     const recvParams = await voiceRequest<TransportParams>({
@@ -723,6 +1066,7 @@ function AppPage() {
       return;
     }
     try {
+      setVoiceJoining(true);
       setVoiceError(null);
       await leaveVoiceChannel();
       const stream = await ensureLocalAudioStream();
@@ -730,29 +1074,37 @@ function AppPage() {
       setVoiceParticipants([]);
       setVoiceChannelId(channelId);
       await setupMediasoupVoice(channelId, stream);
+      logDiagnostic(`Canal vocal rejoint: ${channelId}`);
     } catch (error) {
+      await leaveVoiceChannel();
       setVoiceError(humanizeVoiceError(error));
+      logDiagnostic(`Join vocal echoue: ${String((error as Error)?.message || error)}`);
+    } finally {
+      setVoiceJoining(false);
     }
   }
 
   async function leaveVoiceChannel() {
-    if (voiceChannelId) {
+    const activeVoiceChannelId = voiceChannelIdRef.current;
+    if (activeVoiceChannelId) {
       try {
         await voiceRequest<{ ok: boolean }>({
           action: "setSpeaking",
-          data: { channelId: voiceChannelId, speaking: false },
+          data: { channelId: activeVoiceChannelId, speaking: false },
         });
         await voiceRequest<{ channelId: string }>({
           action: "leave",
-          data: { channelId: voiceChannelId },
+          data: { channelId: activeVoiceChannelId },
         });
       } catch {
         // ignore if socket already disconnected
       }
     }
 
+    producerRef.current?.close();
     sendTransportRef.current?.close();
     recvTransportRef.current?.close();
+    producerRef.current = null;
     sendTransportRef.current = null;
     recvTransportRef.current = null;
     deviceRef.current = null;
@@ -768,18 +1120,23 @@ function AppPage() {
     setVoiceRoster({});
     setVoiceChannelId("");
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+    if (loopbackAudioRef.current) {
+      loopbackAudioRef.current.pause();
+      loopbackAudioRef.current.srcObject = null;
+      loopbackAudioRef.current = null;
     }
+    setLoopbackTesting(false);
     stopLocalSpeakingDetection();
+    logDiagnostic("Canal vocal quitte et ressources nettoyees.");
   }
 
   function toggleMicrophone() {
     const next = !micEnabled;
     setMicEnabled(next);
     localStreamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = next;
+      track.enabled = next && !deafened;
     });
     if (!next && voiceChannelId) {
       setLocalSpeaking(false);
@@ -791,12 +1148,66 @@ function AppPage() {
     }
   }
 
-  function humanizeVoiceError(error: unknown): string {
-    if (error instanceof DOMException && error.name === "NotAllowedError") {
-      return "Micro refuse par le systeme. Autorisez le micro pour votre navigateur (OS + site) puis reessayez.";
+  function toggleDeafen() {
+    const next = !deafened;
+    setDeafened(next);
+    if (next && micEnabled) {
+      setMicEnabled(false);
     }
-    if (error instanceof DOMException && error.name === "NotFoundError") {
-      return "Aucun micro detecte sur cet appareil.";
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !next && micEnabled;
+    });
+    for (const [, audio] of remoteAudioRef.current) {
+      audio.muted = next;
+    }
+    logDiagnostic(next ? "Mode sourdine globale active." : "Mode sourdine globale desactive.");
+  }
+
+  async function toggleLoopbackTest() {
+    if (loopbackTesting) {
+      if (loopbackAudioRef.current) {
+        loopbackAudioRef.current.pause();
+        loopbackAudioRef.current.srcObject = null;
+        loopbackAudioRef.current = null;
+      }
+      setLoopbackTesting(false);
+      return;
+    }
+    try {
+      const stream = await ensureLocalAudioStream();
+      const monitor = new Audio();
+      monitor.autoplay = true;
+      monitor.srcObject = stream;
+      monitor.muted = false;
+      if (audioSettings.outputDeviceId && "setSinkId" in monitor) {
+        await (monitor as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(
+          audioSettings.outputDeviceId,
+        );
+      }
+      await monitor.play();
+      loopbackAudioRef.current = monitor;
+      setLoopbackTesting(true);
+      logDiagnostic("Test loopback demarre.");
+    } catch (error) {
+      setVoiceError(humanizeVoiceError(error));
+      logDiagnostic(`Test loopback echoue: ${String((error as Error)?.message || error)}`);
+    }
+  }
+
+  function humanizeVoiceError(error: unknown): string {
+    if (error instanceof Error && error.message === "media-devices-unsupported") {
+      return "Ce navigateur ne supporte pas la capture micro.";
+    }
+    if (error instanceof DOMException) {
+      if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+        return "Permission micro refusee. Autorisez le micro dans le navigateur et le systeme puis rechargez.";
+      }
+      if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
+        return "Aucun micro compatible detecte. Verifiez le peripherique selectionne.";
+      }
+      if (error.name === "NotReadableError" || error.name === "AbortError") {
+        return "Le micro est deja utilise par une autre application. Fermez-la puis reessayez.";
+      }
     }
     return "Impossible d'activer le micro pour le vocal.";
   }
@@ -808,6 +1219,45 @@ function AppPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function onSelectInputDevice(deviceId: string) {
+    const next = persistAudioSettings({ ...audioSettings, inputDeviceId: deviceId });
+    setVoiceError(null);
+    if (!voiceChannelIdRef.current) return;
+    try {
+      await ensureLocalAudioStream(true);
+      await replaceOutgoingTrack("input-device-change");
+      logDiagnostic(`Micro actif: ${deviceId || "defaut systeme"}`);
+    } catch (error) {
+      setVoiceError(humanizeVoiceError(error));
+      persistAudioSettings({ ...next, inputDeviceId: audioSettings.inputDeviceId });
+    }
+  }
+
+  function onSelectOutputDevice(deviceId: string) {
+    persistAudioSettings({ ...audioSettings, outputDeviceId: deviceId });
+    void applyOutputDeviceToRemoteAudio(deviceId);
+    logDiagnostic(`Sortie active: ${deviceId || "defaut systeme"}`);
+  }
+
+  function onToggleAudioProcessing(
+    key: "echoCancellation" | "noiseSuppression" | "autoGainControl",
+  ) {
+    const next = persistAudioSettings({
+      ...audioSettings,
+      [key]: !audioSettings[key],
+    });
+    if (voiceChannelIdRef.current) {
+      void ensureLocalAudioStream(true)
+        .then(() => replaceOutgoingTrack(`${key}-toggle`))
+        .catch((error) => setVoiceError(humanizeVoiceError(error)));
+    }
+    logDiagnostic(
+      `${key} ${next[key] ? "active" : "desactive"}${
+        voiceChannelIdRef.current ? " (reinit micro)" : ""
+      }.`,
+    );
+  }
 
   function onCreateWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -867,8 +1317,41 @@ function AppPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-92px)] rounded-2xl border border-[#d3dae6] bg-[#eef3f9] p-2 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
-      <div className="grid h-full grid-cols-1 overflow-hidden rounded-xl md:grid-cols-[78px_280px_1fr] xl:grid-cols-[78px_280px_1fr_280px]">
+    <div className="h-[calc(100vh-92px)] rounded-2xl border border-[#d3dae6] bg-[#edf2f8] p-2 text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
+      <div className="mb-2 flex items-center gap-2 rounded-xl border border-[#d4ddeb] bg-white p-2 md:hidden">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-10 px-3"
+          onClick={() => setShowMobileNav((prev) => !prev)}
+        >
+          {showMobileNav ? <PanelLeftClose className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </Button>
+        <select
+          value={selectedWorkspaceId}
+          className="h-10 min-w-0 flex-1 rounded-md border border-[#c7d3e4] bg-white px-3 text-sm text-slate-800 outline-none"
+          onChange={(event) => {
+            setSelectedWorkspaceId(event.target.value);
+            resetChannelSelection();
+            setSelectedDmUserId("");
+            setShowMobileNav(false);
+          }}
+        >
+          {(workspacesQuery.data || []).map((item) => (
+            <option key={item.workspace.id} value={item.workspace.id}>
+              {item.workspace.name}
+            </option>
+          ))}
+        </select>
+        {voiceChannelId ? (
+          <Badge className="border-[#c8d5e8] bg-[#edf3fb] text-[10px] text-[#2f4f73]">
+            Live
+          </Badge>
+        ) : null}
+      </div>
+
+      <div className="grid h-full grid-cols-1 overflow-hidden rounded-xl md:grid-cols-[76px_300px_1fr] xl:grid-cols-[76px_300px_1fr_280px]">
         <aside className="hidden border-r border-[#d7deea] bg-[#f8fafd] p-3 md:block">
           <button className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-[#2f4f73] text-lg font-bold text-white shadow-lg shadow-[#2f4f7340]">
             PC
@@ -880,6 +1363,7 @@ function AppPage() {
                 onClick={() => {
                   setSelectedWorkspaceId(item.workspace.id);
                   resetChannelSelection();
+                  setSelectedDmUserId("");
                 }}
                 className={`group relative grid h-12 w-12 place-items-center rounded-2xl text-xs font-bold transition ${
                   selectedWorkspaceId === item.workspace.id
@@ -895,34 +1379,118 @@ function AppPage() {
           </div>
         </aside>
 
-        <aside className="border-r border-[#d7deea] bg-[#f3f6fb] p-3">
-          <h2 className="mb-3 truncate text-sm font-semibold text-slate-900">
-            {selectedWorkspaceMembership?.workspace.name || "Groupe"}
-          </h2>
-          <div className="space-y-1">
-            {(channelsQuery.data || []).map((channel) => (
-              <button
-                key={channel.id}
-                onClick={() => setSelectedChannelId(channel.id)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
-                  selectedChannelId === channel.id
-                    ? "bg-[#dce6f3] text-slate-900"
-                    : "text-slate-700 hover:bg-[#e6edf7]"
-                }`}
-              >
-                {channel.type === "VOICE" ? (
-                  <Volume2 className="h-4 w-4 opacity-85" />
-                ) : (
-                  <Hash className="h-4 w-4 opacity-85" />
-                )}
-                <span className="truncate">{channel.slug}</span>
-                {channel.type === "VOICE" ? (
-                  <span className="ml-auto rounded border border-[#c7d3e4] px-1.5 py-0.5 text-[10px] uppercase">
-                    voice
-                  </span>
+        <aside
+          className={`border-r border-[#d7deea] bg-[#f3f6fb] p-3 ${
+            showMobileNav ? "absolute inset-y-0 left-0 z-20 w-[88%] max-w-[340px]" : "hidden md:block"
+          }`}
+        >
+          <div className="mb-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Workspace</p>
+            <h2 className="mt-1 truncate text-base font-bold text-slate-900">
+              {selectedWorkspaceMembership?.workspace.name || "Aucun workspace"}
+            </h2>
+          </div>
+
+          {channelsQuery.isPending ? (
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="h-9 animate-pulse rounded-md bg-[#e2e9f5]" />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="space-y-4">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Channels
+              </p>
+              <div className="space-y-1">
+                {textChannels.map((channel) => (
+                  <button
+                    key={channel.id}
+                    onClick={() => {
+                      setSelectedChannelId(channel.id);
+                      setSelectedDmUserId("");
+                      setShowMobileNav(false);
+                    }}
+                    className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
+                      selectedChannelId === channel.id && !selectedDmUserId
+                        ? "bg-[#dce6f3] text-slate-900"
+                        : "text-slate-700 hover:bg-[#e6edf7]"
+                    }`}
+                  >
+                    <Hash className="h-4 w-4 opacity-85" />
+                    <span className="truncate">{channel.slug}</span>
+                  </button>
+                ))}
+                {!textChannels.length ? (
+                  <p className="rounded-md border border-dashed border-[#ccd6e5] px-2 py-2 text-xs text-slate-500">
+                    Aucun channel texte.
+                  </p>
                 ) : null}
-              </button>
-            ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Voice
+              </p>
+              <div className="space-y-1">
+                {voiceChannels.map((channel) => (
+                  <button
+                    key={channel.id}
+                    onClick={() => {
+                      setSelectedChannelId(channel.id);
+                      setSelectedDmUserId("");
+                      setShowMobileNav(false);
+                    }}
+                    className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
+                      selectedChannelId === channel.id && !selectedDmUserId
+                        ? "bg-[#dce6f3] text-slate-900"
+                        : "text-slate-700 hover:bg-[#e6edf7]"
+                    }`}
+                  >
+                    <Volume2 className="h-4 w-4 opacity-85" />
+                    <span className="truncate">{channel.slug}</span>
+                    <span className="ml-auto rounded border border-[#c7d3e4] px-1.5 py-0.5 text-[10px] uppercase">
+                      voice
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                DMs
+              </p>
+              <div className="space-y-1">
+                {dmMembers.map((member) => (
+                  <button
+                    key={member.id}
+                    onClick={() => {
+                      setSelectedDmUserId(member.userId);
+                      setSelectedChannelId("");
+                      setShowMobileNav(false);
+                    }}
+                    className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm ${
+                      selectedDmUserId === member.userId
+                        ? "bg-[#dce6f3] text-slate-900"
+                        : "text-slate-700 hover:bg-[#e6edf7]"
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4 opacity-85" />
+                    <span className="truncate">{member.user.name}</span>
+                    <span className="ml-auto text-[10px] uppercase text-slate-500">preview</span>
+                  </button>
+                ))}
+                {!dmMembers.length ? (
+                  <p className="rounded-md border border-dashed border-[#ccd6e5] px-2 py-2 text-xs text-slate-500">
+                    Aucun contact direct.
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
 
           <form className="mt-4 flex gap-2" onSubmit={onCreateChannel}>
@@ -931,7 +1499,7 @@ function AppPage() {
               onChange={(event) =>
                 setChannelType(event.target.value as "TEXT" | "VOICE")
               }
-              className="h-9 rounded border border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 outline-none"
+              className="h-10 rounded border border-[#c7d3e4] bg-white px-2 text-xs text-slate-700 outline-none"
             >
               <option value="TEXT">text</option>
               <option value="VOICE">voice</option>
@@ -939,10 +1507,8 @@ function AppPage() {
             <Input
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
-              placeholder={
-                channelType === "VOICE" ? "new-voice" : "new-channel"
-              }
-              className="h-9 border-[#c7d3e4] bg-white px-2 text-xs text-slate-900 placeholder:text-slate-500"
+              placeholder={channelType === "VOICE" ? "new-voice" : "new-channel"}
+              className="h-10 border-[#c7d3e4] bg-white px-2 text-xs text-slate-900 placeholder:text-slate-500"
             />
             <Button
               type="submit"
@@ -952,79 +1518,74 @@ function AppPage() {
                 selectedWorkspaceMembership?.role === "MEMBER" &&
                 !workspaceSettingsQuery.data?.allowMemberChannelCreation
               }
-              className="h-9 border-[#c7d3e4] bg-white px-2 text-slate-700 hover:bg-[#edf2f9]"
+              className="h-10 border-[#c7d3e4] bg-white px-2 text-slate-700 hover:bg-[#edf2f9]"
             >
               <Plus className="h-3 w-3" />
             </Button>
           </form>
-
-          <div className="mt-4 rounded-lg border border-[#d3dae6] bg-white p-3">
-            <p className="text-[11px] uppercase tracking-wider text-slate-500">
-              Workspace actif
-            </p>
-            <p className="mt-1 truncate text-sm font-medium text-slate-900">
-              {selectedWorkspaceMembership?.workspace.name || "None"}
-            </p>
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
-              <Users className="h-3.5 w-3.5" />
-              {selectedWorkspaceMembership?.workspace._count.members || 0}{" "}
-              membres
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-slate-600">
-              <MessageSquare className="h-3.5 w-3.5" />
-              {selectedWorkspaceMembership?.workspace._count.channels || 0}{" "}
-              channels
-            </div>
-          </div>
         </aside>
 
         <main className="flex min-h-0 flex-col bg-white">
-          <header className="flex h-14 items-center justify-between border-b border-[#e2e8f2] px-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              {selectedChannel?.type === "VOICE" ? (
-                <Volume2 className="h-4 w-4 text-slate-500" />
-              ) : (
-                <Hash className="h-4 w-4 text-slate-500" />
-              )}
-              {selectedChannel?.slug || "channel"}
+          <header className="flex min-h-16 items-center justify-between gap-2 border-b border-[#e2e8f2] px-4 py-2">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                {selectedWorkspaceMembership?.workspace.name || "Workspace"}
+              </p>
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                {selectedDmMember ? <MessageSquare className="h-4 w-4 text-slate-500" /> : null}
+                {!selectedDmMember && selectedChannel?.type === "VOICE" ? (
+                  <Volume2 className="h-4 w-4 text-slate-500" />
+                ) : null}
+                {!selectedDmMember && selectedChannel?.type !== "VOICE" ? (
+                  <Hash className="h-4 w-4 text-slate-500" />
+                ) : null}
+                <span className="truncate">
+                  {selectedDmMember ? `DM: ${selectedDmMember.user.name}` : selectedChannel?.slug || "channel"}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {selectedChannel?.type === "VOICE" ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {selectedChannel?.type === "VOICE" && !selectedDmMember ? (
                 <>
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    className="h-8 border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 hover:bg-[#edf2f9]"
+                    variant={voiceChannelId === selectedChannel.id ? "secondary" : "outline"}
+                    className="h-9 px-3 text-[12px]"
+                    disabled={voiceJoining}
                     onClick={() =>
                       voiceChannelId === selectedChannel.id
                         ? void leaveVoiceChannel()
                         : void joinVoiceChannel(selectedChannel.id)
                     }
                   >
-                    <PhoneCall className="mr-1 h-3.5 w-3.5" />
-                    {voiceChannelId === selectedChannel.id
-                      ? "Quitter vocal"
-                      : "Rejoindre vocal"}
+                    {voiceJoining ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PhoneCall className="mr-1 h-3.5 w-3.5" />}
+                    {voiceChannelId === selectedChannel.id ? "Leave call" : "Join call"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!voiceChannelId || deafened}
+                    className="h-9 px-3 text-[12px]"
+                    onClick={toggleMicrophone}
+                  >
+                    {micEnabled && !deafened ? <Mic className="mr-1 h-3.5 w-3.5" /> : <MicOff className="mr-1 h-3.5 w-3.5" />}
+                    {micEnabled && !deafened ? "Mute" : "Unmute"}
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     disabled={!voiceChannelId}
-                    className="h-8 border-[#c7d3e4] bg-white px-2 text-[11px] text-slate-700 hover:bg-[#edf2f9]"
-                    onClick={toggleMicrophone}
+                    className="h-9 px-3 text-[12px]"
+                    onClick={toggleDeafen}
                   >
-                    {micEnabled ? (
-                      <Mic className="mr-1 h-3.5 w-3.5" />
-                    ) : (
-                      <MicOff className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    {micEnabled ? "Micro on" : "Micro off"}
+                    {deafened ? <Volume2 className="mr-1 h-3.5 w-3.5" /> : <VolumeX className="mr-1 h-3.5 w-3.5" />}
+                    {deafened ? "Undeafen" : "Deafen"}
                   </Button>
                   <Badge className="border-[#c8d5e8] bg-[#edf3fb] text-[10px] tracking-wider text-[#2f4f73]">
-                    {voiceParticipants.length + (voiceChannelId ? 1 : 0)} en
-                    vocal
+                    {voiceParticipants.length + (voiceChannelId ? 1 : 0)} in call
                   </Badge>
                 </>
               ) : null}
@@ -1035,20 +1596,125 @@ function AppPage() {
           </header>
 
           <section className="flex-1 space-y-2 overflow-auto p-4">
-            {selectedChannel?.type === "VOICE" ? (
-              <div className="rounded-lg border border-dashed border-[#d3dae6] bg-[#f7f9fc] p-5 text-sm text-slate-600">
-                <p className="font-semibold text-slate-800">
-                  Canal vocal actif
+            {!workspacesQuery.data?.length && !onboardingDismissed ? (
+              <div className="rounded-xl border border-[#d7deea] bg-gradient-to-br from-[#ffffff] to-[#eef4fb] p-6">
+                <p className="text-xs uppercase tracking-[0.15em] text-slate-500">Welcome</p>
+                <h3 className="mt-1 text-2xl font-extrabold text-slate-900">Create your first workspace</h3>
+                <p className="mt-2 max-w-xl text-sm text-slate-600">
+                  Start by creating a workspace, then add text and voice channels. You can also join with an invite code.
                 </p>
-                <p className="mt-2">
-                  Rejoignez ce salon avec "Rejoindre vocal", puis
-                  activez/désactivez votre micro.
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  Participants connectes:{" "}
-                  {voiceParticipants.length + (voiceChannelId ? 1 : 0)}
-                </p>
-                <div className="mt-3 grid gap-2">
+                <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <form className="flex gap-2" onSubmit={onCreateWorkspace}>
+                    <Input
+                      value={workspaceName}
+                      onChange={(e) => setWorkspaceName(e.target.value)}
+                      placeholder="Workspace name"
+                      className="h-11 border-[#c7d3e4] bg-white text-sm"
+                    />
+                    <Button type="submit" className="h-11 px-4">Create</Button>
+                  </form>
+                  <Button type="button" variant="outline" className="h-11 px-4" onClick={() => setOnboardingDismissed(true)}>
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {selectedDmMember ? (
+              <div className="rounded-lg border border-dashed border-[#d3dae6] bg-[#f7f9fc] p-6 text-sm text-slate-600">
+                <p className="font-semibold text-slate-800">DM preview with {selectedDmMember.user.name}</p>
+                <p className="mt-2">Direct message channels are shown in navigation and are ready for backend wiring.</p>
+                <p className="mt-2 text-xs text-slate-500">Current build keeps compatibility with existing channel-based messaging APIs.</p>
+              </div>
+            ) : selectedChannel?.type === "VOICE" ? (
+              <div className="space-y-3 rounded-lg border border-[#d3dae6] bg-[#f7f9fc] p-4 text-sm text-slate-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border-[#d7deea] bg-white text-slate-700">
+                    <AudioLines className="mr-1 h-3.5 w-3.5" />
+                    Mic level
+                  </Badge>
+                  <div className="h-2 min-w-[160px] flex-1 overflow-hidden rounded-full bg-[#d9e3f2]">
+                    <div className={`h-full transition-all ${micLevel > 18 ? "bg-emerald-500" : "bg-[#2f4f73]"}`} style={{ width: `${micLevel}%` }} />
+                  </div>
+                  <span className="text-xs text-slate-500">{micLevel}%</span>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Input device
+                    <select
+                      value={audioSettings.inputDeviceId}
+                      onChange={(e) => void onSelectInputDevice(e.target.value)}
+                      className="mt-1 h-10 w-full rounded border border-[#c7d3e4] bg-white px-2 text-sm text-slate-700 outline-none"
+                    >
+                      <option value="">System default</option>
+                      {inputDevices.map((device) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Mic ${device.deviceId.slice(0, 6)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Output device
+                    <select
+                      value={audioSettings.outputDeviceId}
+                      onChange={(e) => onSelectOutputDevice(e.target.value)}
+                      className="mt-1 h-10 w-full rounded border border-[#c7d3e4] bg-white px-2 text-sm text-slate-700 outline-none"
+                    >
+                      <option value="">System default</option>
+                      {outputDevices.map((device) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label || `Speaker ${device.deviceId.slice(0, 6)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" className="h-9 px-3 text-[12px]" onClick={() => void refreshDevices(true)}>
+                    <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                    Refresh devices
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-9 px-3 text-[12px]" onClick={() => void toggleLoopbackTest()}>
+                    <Headphones className="mr-1 h-3.5 w-3.5" />
+                    {loopbackTesting ? "Stop loopback" : "Start loopback"}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-9 px-3 text-[12px]" onClick={() => setShowDiagPanel((prev) => !prev)}>
+                    <MonitorUp className="mr-1 h-3.5 w-3.5" />
+                    {showDiagPanel ? "Hide diagnostics" : "Show diagnostics"}
+                  </Button>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label className="flex min-h-11 items-center gap-2 rounded-md border border-[#d3dae6] bg-white px-3 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={audioSettings.echoCancellation}
+                      onChange={() => onToggleAudioProcessing("echoCancellation")}
+                    />
+                    Echo cancellation
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 rounded-md border border-[#d3dae6] bg-white px-3 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={audioSettings.noiseSuppression}
+                      onChange={() => onToggleAudioProcessing("noiseSuppression")}
+                    />
+                    Noise suppression
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 rounded-md border border-[#d3dae6] bg-white px-3 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={audioSettings.autoGainControl}
+                      onChange={() => onToggleAudioProcessing("autoGainControl")}
+                    />
+                    Auto gain control
+                  </label>
+                </div>
+
+                <div className="grid gap-2">
                   {voiceChannelId ? (
                     <div
                       className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
@@ -1057,12 +1723,8 @@ function AppPage() {
                           : "border-[#d3dae6] bg-white text-slate-700"
                       }`}
                     >
-                      <span className="font-semibold">
-                        {session.user.name || session.user.email} (vous)
-                      </span>
-                      <span className="uppercase tracking-wide">
-                        {localSpeaking ? "parle" : "silence"}
-                      </span>
+                      <span className="font-semibold">{session.user.name || session.user.email} (you)</span>
+                      <span className="uppercase tracking-wide">{localSpeaking ? "speaking" : "idle"}</span>
                     </div>
                   ) : null}
                   {voiceParticipants.map((peerId) => {
@@ -1080,28 +1742,37 @@ function AppPage() {
                             : "border-[#d3dae6] bg-white text-slate-700"
                         }`}
                       >
-                        <span className="font-semibold">
-                          {peer.name || peer.email}
-                        </span>
-                        <span className="uppercase tracking-wide">
-                          {peer.speaking ? "parle" : "silence"}
-                        </span>
+                        <span className="font-semibold">{peer.name || peer.email}</span>
+                        <span className="uppercase tracking-wide">{peer.speaking ? "speaking" : "idle"}</span>
                       </div>
                     );
                   })}
                 </div>
+
+                {showDiagPanel ? (
+                  <div className="rounded-md border border-[#d3dae6] bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Media diagnostics</p>
+                    <div className="mt-2 max-h-40 overflow-auto space-y-1 text-[11px] text-slate-600">
+                      {diagnostics.length ? diagnostics.map((line, index) => <p key={`${line}-${index}`}>{line}</p>) : <p>No diagnostics yet.</p>}
+                    </div>
+                  </div>
+                ) : null}
+
                 {voiceError ? (
-                  <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <p className="mt-1 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
                     {voiceError}
                   </p>
                 ) : null}
               </div>
+            ) : messagesQuery.isPending ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={idx} className="h-12 animate-pulse rounded-md bg-[#edf2f8]" />
+                ))}
+              </div>
             ) : (messagesQuery.data || []).length ? (
               (messagesQuery.data || []).map((msg) => (
-                <article
-                  key={msg.id}
-                  className="rounded-md px-2 py-1.5 hover:bg-[#f4f7fc]"
-                >
+                <article key={msg.id} className="rounded-md px-2 py-2 hover:bg-[#f4f7fc]">
                   <p className="text-sm font-semibold text-slate-900">
                     {msg.author.name}
                     <span className="ml-2 text-xs font-normal text-slate-500">
@@ -1113,25 +1784,23 @@ function AppPage() {
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-[#d3dae6] bg-[#f7f9fc] p-5 text-sm text-slate-600">
-                Aucun message pour le moment. Commencez votre canal de
-                collaboration.
+                Aucun message pour le moment. Dites bonjour a votre equipe.
               </div>
             )}
           </section>
 
-          <form
-            onSubmit={onSendMessage}
-            className="border-t border-[#e2e8f2] p-3"
-          >
+          <form onSubmit={onSendMessage} className="border-t border-[#e2e8f2] p-3">
             <div className="flex items-center gap-2 rounded-lg border border-[#d3dae6] bg-[#f8fafd] px-3 py-2">
               <input
                 value={messageDraft}
                 onChange={(e) => setMessageDraft(e.target.value)}
-                disabled={selectedChannel?.type === "VOICE"}
+                disabled={selectedChannel?.type === "VOICE" || Boolean(selectedDmMember)}
                 placeholder={
-                  selectedChannel
-                    ? `Message #${selectedChannel.slug}`
-                    : "Select a channel"
+                  selectedDmMember
+                    ? "DM backend hookup pending"
+                    : selectedChannel
+                      ? `Message #${selectedChannel.slug}`
+                      : "Select a channel"
                 }
                 className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
               />
@@ -1139,6 +1808,7 @@ function AppPage() {
                 type="submit"
                 disabled={
                   !selectedChannelId ||
+                  Boolean(selectedDmMember) ||
                   sendMessageMutation.isPending ||
                   selectedChannel?.type === "VOICE"
                 }

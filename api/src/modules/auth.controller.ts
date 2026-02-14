@@ -45,7 +45,12 @@ async function sendAuthResponse(reply: FastifyReply, response: Response): Promis
   }
 
   if (contentType.includes('application/json')) {
-    reply.send(JSON.parse(text));
+    try {
+      reply.send(JSON.parse(text));
+    } catch {
+      // Some upstream responses incorrectly set JSON content-type for non-JSON bodies.
+      reply.send(text);
+    }
     return;
   }
 
@@ -71,17 +76,22 @@ export class AuthController {
       return;
     }
 
-    const response = await auth.api.signUpEmail({
-      body: {
-        email: input.email,
-        password: input.password,
-        name: input.name || input.email,
-      },
-      headers: fromNodeHeaders(req.raw.headers),
-      asResponse: true,
-    });
+    try {
+      const response = await auth.api.signUpEmail({
+        body: {
+          email: input.email,
+          password: input.password,
+          name: input.name || input.email,
+        },
+        headers: fromNodeHeaders(req.raw.headers),
+        asResponse: true,
+      });
 
-    await sendAuthResponse(reply, response);
+      await sendAuthResponse(reply, response);
+    } catch (error) {
+      console.error('[auth] sign-up/email failed:', error);
+      reply.status(500).send({ message: 'Authentication error.' });
+    }
   }
 
   @Post('sign-in/email')
@@ -92,26 +102,36 @@ export class AuthController {
       return;
     }
 
-    const response = await auth.api.signInEmail({
-      body: {
-        email: input.email,
-        password: input.password,
-      },
-      headers: fromNodeHeaders(req.raw.headers),
-      asResponse: true,
-    });
+    try {
+      const response = await auth.api.signInEmail({
+        body: {
+          email: input.email,
+          password: input.password,
+        },
+        headers: fromNodeHeaders(req.raw.headers),
+        asResponse: true,
+      });
 
-    await sendAuthResponse(reply, response);
+      await sendAuthResponse(reply, response);
+    } catch (error) {
+      console.error('[auth] sign-in/email failed:', error);
+      reply.status(500).send({ message: 'Authentication error.' });
+    }
   }
 
   @Post('sign-out')
   async logout(@Req() req: FastifyRequest, @Res() reply: FastifyReply): Promise<void> {
-    const response = await auth.api.signOut({
-      headers: fromNodeHeaders(req.raw.headers),
-      asResponse: true,
-    });
+    try {
+      const response = await auth.api.signOut({
+        headers: fromNodeHeaders(req.raw.headers),
+        asResponse: true,
+      });
 
-    await sendAuthResponse(reply, response);
+      await sendAuthResponse(reply, response);
+    } catch (error) {
+      console.error('[auth] sign-out failed:', error);
+      reply.status(500).send({ message: 'Authentication error.' });
+    }
   }
 
   @Get('password-status')
