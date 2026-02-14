@@ -7,7 +7,17 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
+import { fromNodeHeaders } from "better-auth/node";
 import { Server, Socket } from "socket.io";
+import { auth } from "../auth";
+
+type VoiceUser = {
+  socketId: string;
+  userId: string;
+  name: string;
+  email: string;
+  speaking: boolean;
+};
 
 @WebSocketGateway({
   namespace: "/ws",
@@ -21,9 +31,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server!: Server;
 
   private readonly voiceMembership = new Map<string, Set<string>>();
+  private readonly socketUsers = new Map<string, VoiceUser>();
 
-  handleConnection(_client: Socket): void {
-    // no-op
+  async handleConnection(client: Socket): Promise<void> {
+    try {
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(client.handshake.headers),
+      });
+      if (!session?.user) {
+        return;
+      }
+      this.socketUsers.set(client.id, {
+        socketId: client.id,
+        userId: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        speaking: false,
+      });
+    } catch {
+      // keep socket connected for non-auth ws use-cases
+    }
   }
 
   handleDisconnect(client: Socket): void {
@@ -35,6 +62,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.to(room).emit("voice-peer-left", { peerId: client.id });
     }
     this.voiceMembership.delete(client.id);
+    this.socketUsers.delete(client.id);
   }
 
   @SubscribeMessage("join-channel")
@@ -71,6 +99,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const peers = Array.from(
       this.server.sockets.adapter.rooms.get(room) ?? [],
     ).filter((id) => id !== client.id);
+    const peerUsers = peers
+      .map((peerId) => this.socketUsers.get(peerId))
+      .filter((user): user is VoiceUser => Boolean(user));
     client.join(room);
 
     if (!this.voiceMembership.has(client.id)) {
@@ -78,10 +109,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     this.voiceMembership.get(client.id)!.add(room);
 
-    client.emit("voice-peers", { channelId: payload.channelId, peers });
+    client.emit("voice-peers", {
+      channelId: payload.channelId,
+      peers,
+      users: peerUsers,
+    });
+
+    const me = this.socketUsers.get(client.id);
     client.to(room).emit("voice-peer-joined", {
       channelId: payload.channelId,
       peerId: client.id,
+      user: me || null,
     });
   }
 
@@ -100,6 +138,31 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.to(room).emit("voice-peer-left", {
       channelId: payload.channelId,
       peerId: client.id,
+    });
+  }
+
+  @SubscribeMessage("voice-speaking")
+  relayVoiceSpeaking(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { channelId: string; speaking: boolean },
+  ): void {
+    if (!payload?.channelId) {
+      return;
+    }
+    const room = `voice:${payload.channelId}`;
+    const roomMembers = this.server.sockets.adapter.rooms.get(room);
+    if (!roomMembers?.has(client.id)) {
+      return;
+    }
+    const user = this.socketUsers.get(client.id);
+    if (user) {
+      user.speaking = Boolean(payload.speaking);
+      this.socketUsers.set(client.id, user);
+    }
+    client.to(room).emit("voice-speaking", {
+      channelId: payload.channelId,
+      peerId: client.id,
+      speaking: Boolean(payload.speaking),
     });
   }
 

@@ -67,11 +67,17 @@ function AppPage() {
   const [voiceParticipants, setVoiceParticipants] = useState<string[]>([]);
   const [micEnabled, setMicEnabled] = useState(true);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceRoster, setVoiceRoster] = useState<Record<string, { name: string; email: string; speaking: boolean }>>({});
+  const [localSpeaking, setLocalSpeaking] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const remoteAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const speakingContextRef = useRef<AudioContext | null>(null);
+  const speakingLoopRef = useRef<number | null>(null);
+  const lastSpeakingRef = useRef(false);
+  const voiceChannelIdRef = useRef("");
 
   const workspacesQuery = useQuery({
     queryKey: ["workspaces"],
@@ -146,6 +152,10 @@ function AppPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelsQuery.data, voiceChannelId]);
 
+  useEffect(() => {
+    voiceChannelIdRef.current = voiceChannelId;
+  }, [voiceChannelId]);
+
   const messagesQuery = useQuery({
     queryKey: ["messages", selectedChannelId],
     queryFn: () => listMessages(selectedChannelId),
@@ -194,14 +204,43 @@ function AppPage() {
 
     socket.on(
       "voice-peers",
-      async (payload: { channelId: string; peers: string[] }) => {
+      async (payload: {
+        channelId: string;
+        peers: string[];
+        users?: Array<{ socketId: string; name: string; email: string; speaking?: boolean }>;
+      }) => {
         if (!payload?.channelId || !Array.isArray(payload.peers)) return;
+        const roster: Record<string, { name: string; email: string; speaking: boolean }> = {};
+        (payload.users || []).forEach((user) => {
+          roster[user.socketId] = {
+            name: user.name,
+            email: user.email,
+            speaking: Boolean(user.speaking),
+          };
+        });
+        setVoiceRoster(roster);
+        setVoiceParticipants(payload.peers);
         const stream = await ensureLocalAudioStream();
         for (const peerId of payload.peers) {
           await createPeerConnection(payload.channelId, peerId, stream, true);
         }
       },
     );
+
+    socket.on("voice-peer-joined", (payload: { peerId: string; user?: { name: string; email: string } | null }) => {
+      if (!payload?.peerId) return;
+      setVoiceParticipants((prev) => (prev.includes(payload.peerId) ? prev : [...prev, payload.peerId]));
+      if (payload.user) {
+        setVoiceRoster((prev) => ({
+          ...prev,
+          [payload.peerId]: {
+            name: payload.user?.name || "User",
+            email: payload.user?.email || "",
+            speaking: false,
+          },
+        }));
+      }
+    });
 
     socket.on(
       "voice-signal",
@@ -256,6 +295,25 @@ function AppPage() {
         audio.srcObject = null;
         remoteAudioRef.current.delete(peerId);
       }
+      setVoiceRoster((prev) => {
+        const next = { ...prev };
+        delete next[peerId];
+        return next;
+      });
+    });
+
+    socket.on("voice-speaking", (payload: { peerId: string; speaking: boolean }) => {
+      if (!payload?.peerId) return;
+      setVoiceRoster((prev) => {
+        if (!prev[payload.peerId]) return prev;
+        return {
+          ...prev,
+          [payload.peerId]: {
+            ...prev[payload.peerId],
+            speaking: payload.speaking,
+          },
+        };
+      });
     });
 
     return () => {
@@ -411,7 +469,60 @@ function AppPage() {
       track.enabled = micEnabled;
     });
     localStreamRef.current = stream;
+    startLocalSpeakingDetection(stream);
     return stream;
+  }
+
+  function startLocalSpeakingDetection(stream: MediaStream) {
+    stopLocalSpeakingDetection();
+    try {
+      const context = new AudioContext();
+      speakingContextRef.current = context;
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.fftSize);
+
+      const tick = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i += 1) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / data.length);
+        const speaking = micEnabled && rms > 0.035;
+        if (speaking !== lastSpeakingRef.current) {
+          lastSpeakingRef.current = speaking;
+          setLocalSpeaking(speaking);
+          if (voiceChannelIdRef.current) {
+            socketRef.current?.emit("voice-speaking", {
+              channelId: voiceChannelIdRef.current,
+              speaking,
+            });
+          }
+        }
+        speakingLoopRef.current = requestAnimationFrame(tick);
+      };
+
+      speakingLoopRef.current = requestAnimationFrame(tick);
+    } catch {
+      // ignore on unsupported environments
+    }
+  }
+
+  function stopLocalSpeakingDetection() {
+    if (speakingLoopRef.current) {
+      cancelAnimationFrame(speakingLoopRef.current);
+      speakingLoopRef.current = null;
+    }
+    if (speakingContextRef.current) {
+      void speakingContextRef.current.close();
+      speakingContextRef.current = null;
+    }
+    lastSpeakingRef.current = false;
+    setLocalSpeaking(false);
   }
 
   async function createPeerConnection(
@@ -477,6 +588,11 @@ function AppPage() {
           audio.srcObject = null;
           remoteAudioRef.current.delete(peerId);
         }
+        setVoiceRoster((prev) => {
+          const next = { ...prev };
+          delete next[peerId];
+          return next;
+        });
       }
     };
 
@@ -506,6 +622,8 @@ function AppPage() {
       setVoiceError(null);
       await leaveVoiceChannel();
       await ensureLocalAudioStream();
+      setVoiceRoster({});
+      setVoiceParticipants([]);
       setVoiceChannelId(channelId);
       socketRef.current?.emit("join-voice", { channelId });
     } catch (error) {
@@ -515,6 +633,10 @@ function AppPage() {
 
   async function leaveVoiceChannel() {
     if (voiceChannelId) {
+      socketRef.current?.emit("voice-speaking", {
+        channelId: voiceChannelId,
+        speaking: false,
+      });
       socketRef.current?.emit("leave-voice", { channelId: voiceChannelId });
     }
 
@@ -528,12 +650,14 @@ function AppPage() {
     }
     remoteAudioRef.current.clear();
     setVoiceParticipants([]);
+    setVoiceRoster({});
     setVoiceChannelId("");
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+    stopLocalSpeakingDetection();
   }
 
   function toggleMicrophone() {
@@ -542,6 +666,14 @@ function AppPage() {
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = next;
     });
+    if (!next && voiceChannelId) {
+      setLocalSpeaking(false);
+      lastSpeakingRef.current = false;
+      socketRef.current?.emit("voice-speaking", {
+        channelId: voiceChannelId,
+        speaking: false,
+      });
+    }
   }
 
   function humanizeVoiceError(error: unknown): string {
@@ -557,6 +689,7 @@ function AppPage() {
   useEffect(() => {
     return () => {
       void leaveVoiceChannel();
+      stopLocalSpeakingDetection();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -800,6 +933,39 @@ function AppPage() {
                   Participants connectes:{" "}
                   {voiceParticipants.length + (voiceChannelId ? 1 : 0)}
                 </p>
+                <div className="mt-3 grid gap-2">
+                  {voiceChannelId ? (
+                    <div
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
+                        localSpeaking
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-[#d3dae6] bg-white text-slate-700"
+                      }`}
+                    >
+                      <span className="font-semibold">
+                        {session.user.name || session.user.email} (vous)
+                      </span>
+                      <span className="uppercase tracking-wide">
+                        {localSpeaking ? "parle" : "silence"}
+                      </span>
+                    </div>
+                  ) : null}
+                  {Object.entries(voiceRoster).map(([peerId, peer]) => (
+                    <div
+                      key={peerId}
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
+                        peer.speaking
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                          : "border-[#d3dae6] bg-white text-slate-700"
+                      }`}
+                    >
+                      <span className="font-semibold">{peer.name || peer.email}</span>
+                      <span className="uppercase tracking-wide">
+                        {peer.speaking ? "parle" : "silence"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
                 {voiceError ? (
                   <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
                     {voiceError}
