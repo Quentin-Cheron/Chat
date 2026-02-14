@@ -84,10 +84,10 @@ function RootLayout() {
           ) : null}
           {session?.user?.email ? (
             <Link
-              to="/profile"
+              to="/settings"
               className={isAppRoute ? "rounded-md border border-[#c7d3e4] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider hover:bg-[#edf2f9]" : "rounded-md border border-[#3a3c42] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider hover:bg-[#35373c]"}
             >
-              Profile
+              Settings
             </Link>
           ) : null}
 

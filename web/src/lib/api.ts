@@ -246,6 +246,26 @@ export async function updateProfile(params: { name: string; image?: string | nul
   return response.json() as Promise<UserProfilePayload>;
 }
 
+export async function updateAccount(params: {
+  name: string;
+  email: string;
+  currentPassword?: string;
+}): Promise<UserProfilePayload> {
+  const response = await fetch("/api/auth/account", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(params),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  return response.json() as Promise<UserProfilePayload>;
+}
+
 export function listWorkspaces(): Promise<WorkspaceMembership[]> {
   return request<WorkspaceMembership[]>("/api/workspaces");
 }

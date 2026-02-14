@@ -19,6 +19,7 @@ import {
   updateWorkspaceSettings,
 } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { readAudioSettings } from "@/lib/audio-settings";
 import { useAppStore } from "@/store/app-store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -65,6 +66,7 @@ function AppPage() {
   const [voiceChannelId, setVoiceChannelId] = useState("");
   const [voiceParticipants, setVoiceParticipants] = useState<string[]>([]);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -398,7 +400,13 @@ function AppPage() {
     if (localStreamRef.current) {
       return localStreamRef.current;
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioSettings = readAudioSettings();
+    const constraints: MediaStreamConstraints = {
+      audio: audioSettings.inputDeviceId
+        ? { deviceId: { exact: audioSettings.inputDeviceId } }
+        : true,
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
     stream.getAudioTracks().forEach((track) => {
       track.enabled = micEnabled;
     });
@@ -444,6 +452,12 @@ function AppPage() {
         remoteAudioRef.current.set(peerId, audio);
       }
       audio.srcObject = stream;
+      const audioSettings = readAudioSettings();
+      if (audioSettings.outputDeviceId && "setSinkId" in audio) {
+        void (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> })
+          .setSinkId(audioSettings.outputDeviceId)
+          .catch(() => undefined);
+      }
       void audio.play().catch(() => {
         // Browser autoplay policies may require user interaction first.
       });
@@ -488,10 +502,15 @@ function AppPage() {
     if (voiceChannelId === channelId) {
       return;
     }
-    await leaveVoiceChannel();
-    await ensureLocalAudioStream();
-    setVoiceChannelId(channelId);
-    socketRef.current?.emit("join-voice", { channelId });
+    try {
+      setVoiceError(null);
+      await leaveVoiceChannel();
+      await ensureLocalAudioStream();
+      setVoiceChannelId(channelId);
+      socketRef.current?.emit("join-voice", { channelId });
+    } catch (error) {
+      setVoiceError(humanizeVoiceError(error));
+    }
   }
 
   async function leaveVoiceChannel() {
@@ -523,6 +542,16 @@ function AppPage() {
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = next;
     });
+  }
+
+  function humanizeVoiceError(error: unknown): string {
+    if (error instanceof DOMException && error.name === "NotAllowedError") {
+      return "Micro refuse par le systeme. Autorisez le micro pour votre navigateur (OS + site) puis reessayez.";
+    }
+    if (error instanceof DOMException && error.name === "NotFoundError") {
+      return "Aucun micro detecte sur cet appareil.";
+    }
+    return "Impossible d'activer le micro pour le vocal.";
   }
 
   useEffect(() => {
@@ -771,6 +800,11 @@ function AppPage() {
                   Participants connectes:{" "}
                   {voiceParticipants.length + (voiceChannelId ? 1 : 0)}
                 </p>
+                {voiceError ? (
+                  <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {voiceError}
+                  </p>
+                ) : null}
               </div>
             ) : (messagesQuery.data || []).length ? (
               (messagesQuery.data || []).map((msg) => (

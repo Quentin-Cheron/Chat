@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
 import { auth } from '../auth';
@@ -14,6 +14,12 @@ type AuthBody = {
 type ChangePasswordBody = {
   currentPassword: string;
   newPassword: string;
+};
+
+type UpdateAccountBody = {
+  name?: string;
+  email?: string;
+  currentPassword?: string;
 };
 
 function normalizeAuthBody(body: AuthBody | undefined): AuthBody {
@@ -161,6 +167,69 @@ export class AuthController {
       },
     });
     return updated;
+  }
+
+  @Post('account')
+  async updateAccount(@Req() req: FastifyRequest, @Body() body: UpdateAccountBody) {
+    const user = await requireUserSession(req);
+    const nextName = body?.name?.trim?.();
+    const nextEmail = body?.email?.trim?.().toLowerCase();
+
+    if (!nextName || nextName.length < 2) {
+      throw new BadRequestException('Name must contain at least 2 characters.');
+    }
+    if (!nextEmail || !nextEmail.includes('@')) {
+      throw new BadRequestException('A valid email is required.');
+    }
+
+    const current = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { email: true },
+    });
+    if (!current) {
+      throw new UnauthorizedException('Authentication required.');
+    }
+
+    if (nextEmail !== current.email) {
+      if (!body?.currentPassword) {
+        throw new BadRequestException('Current password is required to change email.');
+      }
+      const verify = await auth.api.signInEmail({
+        body: {
+          email: current.email,
+          password: body.currentPassword,
+        },
+        headers: fromNodeHeaders(req.raw.headers),
+        asResponse: true,
+      });
+      if (!verify.ok) {
+        throw new UnauthorizedException('Current password is invalid.');
+      }
+
+      const existing = await this.prisma.user.findUnique({
+        where: { email: nextEmail },
+        select: { id: true },
+      });
+      if (existing && existing.id !== user.id) {
+        throw new ConflictException('Email is already in use.');
+      }
+    }
+
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: nextName,
+        email: nextEmail,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        image: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 
   @Post('change-password')
