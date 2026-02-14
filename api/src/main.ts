@@ -10,9 +10,6 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
-    {
-      bodyParser: false,
-    },
   );
   app.setGlobalPrefix("api");
   app.enableCors({
