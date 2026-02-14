@@ -4,7 +4,7 @@ set -euo pipefail
 APP_DIR="/opt/privatechat"
 COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 ENV_FILE="$APP_DIR/.env"
-ARCHIVE_URL="${ARCHIVE_URL:-https://github.com/your-org/privatechat/archive/refs/heads/main.tar.gz}"
+ARCHIVE_URL="${ARCHIVE_URL:-https://github.com/Quentin-Cheron/Chat/archive/refs/heads/main.tar.gz}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 INSTALL_ROLE="${INSTALL_ROLE:-standalone}" # instance | resolver | standalone
 DEFAULT_CONTROL_PLANE_URL="${DEFAULT_CONTROL_PLANE_URL:-}"
