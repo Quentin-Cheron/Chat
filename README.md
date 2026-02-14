@@ -21,6 +21,10 @@ Le script autodetecte:
 - `ADMIN_EMAIL` (`admin@<domain>`)
 - secrets internes
 
+Au premier demarrage:
+- un compte admin est cree automatiquement
+- le mot de passe temporaire doit etre remplace sur `/security/change-password`
+
 Mode par defaut: **standalone** (pas de resolver central, invitation directe via `https://instance/invite/<code>`).
 
 ### 1) Resolver central (optionnel)

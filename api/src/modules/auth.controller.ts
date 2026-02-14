@@ -2,11 +2,18 @@ import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
 import { auth } from '../auth';
+import { PrismaService } from '../prisma.service';
+import { requireUserSession } from './auth-session';
 
 type AuthBody = {
   email: string;
   password: string;
   name?: string;
+};
+
+type ChangePasswordBody = {
+  currentPassword: string;
+  newPassword: string;
 };
 
 function normalizeAuthBody(body: AuthBody | undefined): AuthBody {
@@ -41,6 +48,8 @@ async function sendAuthResponse(reply: FastifyReply, response: Response): Promis
 
 @Controller('auth')
 export class AuthController {
+  constructor(private readonly prisma: PrismaService) {}
+
   @Get('get-session')
   async session(@Req() req: FastifyRequest) {
     return auth.api.getSession({
@@ -95,6 +104,48 @@ export class AuthController {
       headers: fromNodeHeaders(req.raw.headers),
       asResponse: true,
     });
+
+    await sendAuthResponse(reply, response);
+  }
+
+  @Get('password-status')
+  async passwordStatus(@Req() req: FastifyRequest) {
+    const user = await requireUserSession(req);
+    const row = await this.prisma.userSecurity.findUnique({
+      where: { userId: user.id },
+      select: { mustChangePassword: true },
+    });
+
+    return {
+      mustChangePassword: row?.mustChangePassword ?? false,
+    };
+  }
+
+  @Post('change-password')
+  async changePassword(@Body() body: ChangePasswordBody, @Req() req: FastifyRequest, @Res() reply: FastifyReply): Promise<void> {
+    const input = {
+      currentPassword: body?.currentPassword || '',
+      newPassword: body?.newPassword || '',
+    };
+    if (!input.currentPassword || !input.newPassword) {
+      reply.status(400).send({ message: 'Current and new password are required.' });
+      return;
+    }
+
+    const user = await requireUserSession(req);
+    const response = await auth.api.changePassword({
+      body: input,
+      headers: fromNodeHeaders(req.raw.headers),
+      asResponse: true,
+    });
+
+    if (response.ok) {
+      await this.prisma.userSecurity.upsert({
+        where: { userId: user.id },
+        update: { mustChangePassword: false },
+        create: { userId: user.id, mustChangePassword: false },
+      });
+    }
 
     await sendAuthResponse(reply, response);
   }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { authClient } from '@/lib/auth-client';
+import { getPasswordStatus } from '@/lib/api';
 
 export const Route = createFileRoute('/login')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -32,6 +33,16 @@ function LoginPage() {
     if (signInError) {
       setError(signInError.message || 'Login failed');
       return;
+    }
+
+    try {
+      const status = await getPasswordStatus();
+      if (status.mustChangePassword) {
+        await navigate({ to: '/security/change-password' });
+        return;
+      }
+    } catch {
+      // If status check fails, keep normal flow.
     }
 
     await navigate({ to: search.redirect || '/app' });

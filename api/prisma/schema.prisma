@@ -31,8 +31,20 @@ model User {
   memberships     Member[]
   messages        Message[]   @relation("MessageAuthor")
   invitesCreated  Invite[]    @relation("InviteCreator")
+  security        UserSecurity?
 
   @@map("user")
+}
+
+model UserSecurity {
+  userId             String   @id
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_security")
 }
 
 model Session {

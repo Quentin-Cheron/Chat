@@ -35,6 +35,10 @@ export type SessionPayload = {
   } | null;
 };
 
+export type PasswordStatusPayload = {
+  mustChangePassword: boolean;
+};
+
 export type WorkspaceMembership = {
   id: string;
   role: "OWNER" | "ADMIN" | "MEMBER";
@@ -169,6 +173,26 @@ export async function logout(): Promise<void> {
 
 export function getSession(): Promise<SessionPayload> {
   return request<SessionPayload>("/api/auth/get-session");
+}
+
+export function getPasswordStatus(): Promise<PasswordStatusPayload> {
+  return request<PasswordStatusPayload>("/api/auth/password-status");
+}
+
+export async function changePassword(params: { currentPassword: string; newPassword: string }): Promise<void> {
+  const response = await fetch("/api/auth/change-password", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
 }
 
 export function listWorkspaces(): Promise<WorkspaceMembership[]> {

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import { io, type Socket } from 'socket.io-client';
 import { Hash, MessageSquare, Plus, Send, Shield, Users } from 'lucide-react';
 import { authClient } from '@/lib/auth-client';
@@ -9,6 +9,7 @@ import {
   createInvite,
   createWorkspace,
   getResolverJoinLink,
+  getPasswordStatus,
   joinInvite,
   listChannels,
   listMessages,
@@ -27,6 +28,7 @@ export const Route = createFileRoute('/app')({
 
 function AppPage() {
   const { data: session, isPending } = authClient.useSession();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
@@ -94,6 +96,19 @@ function AppPage() {
     queryFn: () => listMessages(selectedChannelId),
     enabled: Boolean(selectedChannelId),
   });
+
+  const passwordStatusQuery = useQuery({
+    queryKey: ['password-status'],
+    queryFn: getPasswordStatus,
+    enabled: Boolean(session?.user),
+  });
+
+  useEffect(() => {
+    if (!session?.user) return;
+    if (passwordStatusQuery.data?.mustChangePassword) {
+      void navigate({ to: '/security/change-password' });
+    }
+  }, [navigate, passwordStatusQuery.data?.mustChangePassword, session?.user]);
 
   useEffect(() => {
     if (!selectedChannelId) {

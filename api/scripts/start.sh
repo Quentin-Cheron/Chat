@@ -20,4 +20,9 @@ while [ "$attempt" -le "$max_attempts" ]; do
   sleep 3
 done
 
+echo "[api] bootstrapping admin account"
+if ! node dist/src/bootstrap-admin.js; then
+  echo "[api] admin bootstrap failed; continuing API startup"
+fi
+
 exec node dist/src/main.js
