@@ -8,7 +8,7 @@ MVP d'une plateforme "Discord privé" auto-hébergée sur VPS avec une seule com
 curl -fsSL https://example.com/install.sh | bash
 ```
 
-## Go-live en 1 commande curl
+## Go-live en 1 commande curl (recommande: autonome)
 
 ### Client self-service (aucune saisie)
 
@@ -21,7 +21,9 @@ Le script autodetecte:
 - `ADMIN_EMAIL` (`admin@<domain>`)
 - secrets internes
 
-### 1) Resolver central
+Mode par defaut: **standalone** (pas de resolver central, invitation directe via `https://instance/invite/<code>`).
+
+### 1) Resolver central (optionnel)
 
 ```bash
 curl -fsSL https://example.com/install.sh | sudo env \
@@ -69,9 +71,21 @@ Puis ouvre: `http://localhost`.
 - `web/`: projet frontend séparé (React + Vite)
 - `desktop/`: client desktop (Tauri + React)
 
-## Join par code (control plane)
+## Invitations directes (mode recommande)
 
-Le projet supporte maintenant un flux "entrer un code -> redirection vers le bon serveur":
+Chaque instance partage un lien direct:
+
+- `https://votre-instance.com/invite/<code>`
+
+Avantages:
+
+- pas de service central obligatoire
+- zero redirection intermediaire
+- architecture plus simple a operer
+
+## Join par code (control plane optionnel)
+
+Le projet supporte aussi un flux "entrer un code -> redirection vers le bon serveur":
 
 - Endpoint resolver central:
   - `POST /api/resolver/register` (protégé par `x-resolver-token`)

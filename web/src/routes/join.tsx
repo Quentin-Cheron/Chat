@@ -39,6 +39,12 @@ function JoinPage() {
   }, [search.code]);
 
   async function joinWithCode(codeValue: string) {
+    const directInvite = extractInviteFromInput(codeValue);
+    if (directInvite) {
+      window.location.href = directInvite.redirectTo;
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -63,19 +69,19 @@ function JoinPage() {
       <CardHeader>
         <CardTitle className="text-3xl text-slate-100">Rejoindre un espace</CardTitle>
         <CardDescription className="text-slate-400">
-          Entrez votre code d'invitation. Nous vous redirigeons automatiquement vers le bon serveur prive.
+          Collez un lien d'invitation direct. Le code resolver reste supporte en fallback.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <label className="text-sm font-semibold text-slate-200" htmlFor="invite-code">Code invitation</label>
+            <label className="text-sm font-semibold text-slate-200" htmlFor="invite-code">Lien ou code invitation</label>
             <Input
               id="invite-code"
               required
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Ex: bM8q3xK9"
+              placeholder="Ex: https://chat.client.com/invite/bM8q3xK9"
               className="border-[#2f3136] bg-[#101216] text-slate-100 placeholder:text-slate-500"
             />
           </div>
@@ -138,6 +144,9 @@ function simplifyResolverError(message: string): string {
   if (message.includes('HTTP 429')) {
     return 'Trop de tentatives. Reessayez dans une minute.';
   }
+  if (message.includes('HTTP 404')) {
+    return 'Resolver indisponible. Utilisez un lien d\'invitation direct.';
+  }
   return message;
 }
 
@@ -173,4 +182,23 @@ function formatRelative(dateIso: string): string {
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `il y a ${diffH} h`;
   return date.toLocaleDateString();
+}
+
+function extractInviteFromInput(input: string): { code: string; redirectTo: string } | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const match = url.pathname.match(/\/invite\/([^/]+)/);
+    if (!match?.[1]) {
+      return null;
+    }
+    const inviteCode = decodeURIComponent(match[1]);
+    return { code: inviteCode, redirectTo: `${url.origin}/invite/${encodeURIComponent(inviteCode)}` };
+  } catch {
+    return null;
+  }
 }

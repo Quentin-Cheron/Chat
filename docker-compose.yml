@@ -7,7 +7,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      - DOMAIN=${DOMAIN}
+      - DOMAIN=${DOMAIN:-app.private-chat.site}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -39,11 +39,11 @@ services:
       - PORT=3000
       - APP_NAME=${APP_NAME}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - DOMAIN=${DOMAIN}
+      - DOMAIN=${DOMAIN:-app.private-chat.site}
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://app.private-chat.site}
       - CONTROL_PLANE_URL=${CONTROL_PLANE_URL}
       - INSTANCE_PUBLIC_URL=${INSTANCE_PUBLIC_URL}
       - RESOLVER_REGISTER_TOKEN=${RESOLVER_REGISTER_TOKEN}

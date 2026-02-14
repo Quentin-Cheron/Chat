@@ -260,8 +260,12 @@ export function resolveInviteCode(code: string): Promise<ResolvedInvitePayload> 
 }
 
 export function getShareInviteLink(code: string): string {
-  if (publicJoinBaseUrl) {
-    return `${publicJoinBaseUrl}/join?code=${encodeURIComponent(code)}`;
-  }
   return `${window.location.origin}/invite/${encodeURIComponent(code)}`;
+}
+
+export function getResolverJoinLink(code: string): string | null {
+  if (!publicJoinBaseUrl) {
+    return null;
+  }
+  return `${publicJoinBaseUrl}/join?code=${encodeURIComponent(code)}`;
 }

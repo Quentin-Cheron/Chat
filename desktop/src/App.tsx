@@ -9,7 +9,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
-import { humanizeResolverError, resolveInviteCode } from "./lib/resolver";
+import {
+  humanizeResolverError,
+  parseDirectInviteLink,
+  resolveInviteCode,
+} from "./lib/resolver";
 import {
   readRecentServers,
   removeRecentServer,
@@ -25,11 +29,25 @@ export function App() {
   const [manualUrl, setManualUrl] = useState("");
 
   const statusLabel = useMemo(
-    () => (loading ? "Connexion..." : "Rejoindre via code"),
+    () => (loading ? "Connexion..." : "Rejoindre"),
     [loading],
   );
 
   async function runJoin(inputCode: string) {
+    const directInvite = parseDirectInviteLink(inputCode);
+    if (directInvite) {
+      setError(null);
+      setRecent(
+        writeRecentServer({
+          code: directInvite.code,
+          targetUrl: directInvite.targetUrl,
+          at: new Date().toISOString(),
+        }),
+      );
+      await openExternal(directInvite.redirectTo);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -138,17 +156,17 @@ export function App() {
             <p className="eyebrow">Souverainete des donnees</p>
             <h1>Vos donnees restent sur le serveur de votre organisation.</h1>
             <p className="subtext">
-              Entrez un code d'invitation. L'application resout la cible puis
-              vous redirige vers l'instance privee.
+              Collez un lien d'invitation direct. Le code resolver reste
+              disponible en fallback.
             </p>
 
             <form className="join-form" onSubmit={onSubmit}>
-              <label htmlFor="code">Code d'invitation</label>
+              <label htmlFor="code">Lien ou code d'invitation</label>
               <input
                 id="code"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="ex: bM8q3xK9"
+                placeholder="ex: https://chat.client.com/invite/bM8q3xK9"
                 autoComplete="off"
                 required
               />

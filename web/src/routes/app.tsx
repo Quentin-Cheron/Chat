@@ -8,6 +8,7 @@ import {
   createChannel,
   createInvite,
   createWorkspace,
+  getResolverJoinLink,
   joinInvite,
   listChannels,
   listMessages,
@@ -40,6 +41,7 @@ function AppPage() {
   const [channelName, setChannelName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [inviteLink, setInviteLink] = useState('');
+  const [resolverInviteLink, setResolverInviteLink] = useState('');
 
   const workspacesQuery = useQuery({
     queryKey: ['workspaces'],
@@ -137,6 +139,7 @@ function AppPage() {
     mutationFn: (workspaceId: string) => createInvite(workspaceId),
     onSuccess: (data) => {
       setInviteLink(getShareInviteLink(data.code));
+      setResolverInviteLink(getResolverJoinLink(data.code) ?? '');
     },
   });
 
@@ -371,11 +374,22 @@ function AppPage() {
               size="sm"
               className="mt-3 h-10 w-full border-[#2f4f73] bg-[#2f4f73] text-xs text-white hover:bg-[#274566]"
             >
-              Generer invitation
+              Generer lien d'invitation
             </Button>
           ) : null}
 
-          {inviteLink ? <p className="mt-3 break-all rounded-md border border-[#d3dae6] bg-white p-2 text-[11px] text-slate-700">{inviteLink}</p> : null}
+          {inviteLink ? (
+            <div className="mt-3 space-y-2 rounded-md border border-[#d3dae6] bg-white p-2 text-[11px] text-slate-700">
+              <p className="font-semibold text-slate-900">Lien direct (recommande)</p>
+              <p className="break-all">{inviteLink}</p>
+              {resolverInviteLink ? (
+                <>
+                  <p className="font-semibold text-slate-900">Lien via resolver (optionnel)</p>
+                  <p className="break-all">{resolverInviteLink}</p>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-4 rounded-md border border-[#d3dae6] bg-white p-3 text-xs text-slate-700">
             <p className="font-semibold text-slate-900">Informations</p>

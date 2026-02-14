@@ -6,8 +6,8 @@ COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 ENV_FILE="$APP_DIR/.env"
 ARCHIVE_URL="${ARCHIVE_URL:-https://github.com/your-org/privatechat/archive/refs/heads/main.tar.gz}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
-INSTALL_ROLE="${INSTALL_ROLE:-instance}" # instance | resolver | standalone
-DEFAULT_CONTROL_PLANE_URL="${DEFAULT_CONTROL_PLANE_URL:-https://resolver.example.com}"
+INSTALL_ROLE="${INSTALL_ROLE:-standalone}" # instance | resolver | standalone
+DEFAULT_CONTROL_PLANE_URL="${DEFAULT_CONTROL_PLANE_URL:-}"
 
 log() { printf "\n[privatechat] %s\n" "$*"; }
 fail() { printf "\n[privatechat][error] %s\n" "$*" >&2; exit 1; }
@@ -37,6 +37,8 @@ ask_inputs() {
   CONTROL_PLANE_URL="${CONTROL_PLANE_URL:-}"
   INSTANCE_PUBLIC_URL="${INSTANCE_PUBLIC_URL:-}"
   RESOLVER_REGISTER_TOKEN="${RESOLVER_REGISTER_TOKEN:-}"
+  VITE_RESOLVER_BASE_URL="${VITE_RESOLVER_BASE_URL:-}"
+  VITE_PUBLIC_JOIN_BASE_URL="${VITE_PUBLIC_JOIN_BASE_URL:-}"
 
   case "$INSTALL_ROLE" in
     instance|resolver|standalone) ;;
@@ -66,7 +68,7 @@ ask_inputs() {
     printf "\n"
 
     if [ "$INSTALL_ROLE" = "instance" ]; then
-      read -r -p "URL control-plane resolver (ex: https://resolver.mondomaine.com): " CONTROL_PLANE_URL
+      read -r -p "URL control-plane resolver (optionnel, ex: https://resolver.mondomaine.com): " CONTROL_PLANE_URL
     fi
   fi
 
@@ -83,8 +85,15 @@ ask_inputs() {
     RESOLVER_REGISTER_TOKEN="$(openssl rand -hex 24)"
   fi
 
-  if [ "$INSTALL_ROLE" = "instance" ] && [ -z "$CONTROL_PLANE_URL" ]; then
+  if [ "$INSTALL_ROLE" = "instance" ] && [ -z "$CONTROL_PLANE_URL" ] && [ -n "$DEFAULT_CONTROL_PLANE_URL" ]; then
     CONTROL_PLANE_URL="$DEFAULT_CONTROL_PLANE_URL"
+  fi
+
+  if [ -z "$VITE_RESOLVER_BASE_URL" ]; then
+    VITE_RESOLVER_BASE_URL="$CONTROL_PLANE_URL"
+  fi
+  if [ -z "$VITE_PUBLIC_JOIN_BASE_URL" ]; then
+    VITE_PUBLIC_JOIN_BASE_URL="$CONTROL_PLANE_URL"
   fi
 }
 
@@ -171,8 +180,8 @@ REDIS_URL=redis://redis:6379
 CONTROL_PLANE_URL=$CONTROL_PLANE_URL
 INSTANCE_PUBLIC_URL=$INSTANCE_PUBLIC_URL
 RESOLVER_REGISTER_TOKEN=$RESOLVER_REGISTER_TOKEN
-VITE_RESOLVER_BASE_URL=$CONTROL_PLANE_URL
-VITE_PUBLIC_JOIN_BASE_URL=$CONTROL_PLANE_URL
+VITE_RESOLVER_BASE_URL=$VITE_RESOLVER_BASE_URL
+VITE_PUBLIC_JOIN_BASE_URL=$VITE_PUBLIC_JOIN_BASE_URL
 NODE_ENV=production
 ENV
 }
@@ -197,7 +206,7 @@ Installation terminée.
 URL: https://$DOMAIN
 Admin: $ADMIN_EMAIL
 Mot de passe: $ADMIN_PASSWORD
-Invitation (MVP): https://$DOMAIN/invite/first
+Invitation (MVP): https://$DOMAIN/invite/<code>
 Role: $INSTALL_ROLE
 
 Commandes utiles:
