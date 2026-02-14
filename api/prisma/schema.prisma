@@ -14,6 +14,7 @@ enum MemberRole {
 
 enum ChannelType {
   TEXT
+  VOICE
 }
 
 model User {

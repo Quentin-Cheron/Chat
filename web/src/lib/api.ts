@@ -68,7 +68,7 @@ export type ChannelPayload = {
   workspaceId: string;
   name: string;
   slug: string;
-  type: "TEXT";
+  type: "TEXT" | "VOICE";
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -292,14 +292,14 @@ export async function updateWorkspaceSettings(
   return response.json() as Promise<WorkspaceSettingsPayload>;
 }
 
-export async function createChannel(workspaceId: string, name: string): Promise<void> {
+export async function createChannel(workspaceId: string, name: string, type: "TEXT" | "VOICE" = "TEXT"): Promise<void> {
   const response = await fetch(`/api/workspaces/${workspaceId}/channels`, {
     method: "POST",
     credentials: "include",
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify({ name, type: "TEXT" }),
+    body: JSON.stringify({ name, type }),
   });
   if (!response.ok) {
     const text = await response.text();
