@@ -2,7 +2,7 @@
 
 MVP d'une plateforme "Discord privé" auto-hébergée sur VPS avec une seule commande d'installation.
 
-## Quick start (sur VPS Ubuntu)
+## Quick start (sur VPS Debian/Ubuntu)
 
 ```bash
 curl -fsSL https://example.com/install.sh | bash

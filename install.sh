@@ -25,9 +25,10 @@ check_os() {
     fail "Impossible de détecter l'OS"
   fi
   . /etc/os-release
-  if [ "${ID:-}" != "ubuntu" ]; then
-    fail "OS non supporté pour MVP. Utilise Ubuntu 22.04 ou 24.04"
-  fi
+  case "${ID:-}" in
+    ubuntu|debian) ;;
+    *) fail "OS non supporté pour MVP. Utilise Debian 12+ ou Ubuntu 22.04/24.04" ;;
+  esac
 }
 
 ask_inputs() {
@@ -111,13 +112,19 @@ install_docker() {
   fi
 
   log "Installation Docker"
+  . /etc/os-release
+  case "${ID:-}" in
+    ubuntu) DOCKER_DISTRO="ubuntu" ;;
+    debian) DOCKER_DISTRO="debian" ;;
+    *) fail "Distribution non supportée pour installation Docker automatique: ${ID:-unknown}" ;;
+  esac
+
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  curl -fsSL "https://download.docker.com/linux/${DOCKER_DISTRO}/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
 
-  . /etc/os-release
   echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DOCKER_DISTRO} ${VERSION_CODENAME} stable" \
     > /etc/apt/sources.list.d/docker.list
 
   apt-get update -y
