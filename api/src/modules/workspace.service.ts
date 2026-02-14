@@ -280,7 +280,7 @@ export class WorkspaceService {
   }
 
   async updateMemberRole(input: UpdateMemberRoleInput) {
-    if (![MemberRole.ADMIN, MemberRole.MEMBER].includes(input.role)) {
+    if (input.role !== MemberRole.ADMIN && input.role !== MemberRole.MEMBER) {
       throw new BadRequestException('Only ADMIN or MEMBER roles can be assigned.');
     }
 
