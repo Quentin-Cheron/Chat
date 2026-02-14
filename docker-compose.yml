@@ -43,6 +43,7 @@ services:
       - PORT=3000
       - APP_NAME=${APP_NAME}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - DOMAIN=${DOMAIN}
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
