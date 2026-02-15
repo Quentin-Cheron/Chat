@@ -9,8 +9,8 @@ services:
     environment:
       # URL interne au réseau Docker (utilisée par le backend Convex lui-même)
       - CONVEX_CLOUD_ORIGIN=http://convex:3210
-      # URL publique du site Convex (pour les HTTP actions / Better Auth)
-      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_URL:-http://localhost:3211}
+      # URL publique du site Convex (pour les HTTP actions / Better Auth) — sans path
+      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN:-http://localhost:3211}
       # Clé admin pour les déploiements self-hosted
       - CONVEX_ADMIN_KEY=insecure-0000000000000000000000000000000000000000000000000000000000000001
     volumes:

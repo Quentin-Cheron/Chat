@@ -177,6 +177,8 @@ VITE_CONVEX_URL=https://$DOMAIN/convex
 # URL publique du site Convex (HTTP actions, Better Auth)
 VITE_CONVEX_SITE_URL=https://$DOMAIN/convex-site
 CONVEX_SITE_URL=https://$DOMAIN/convex-site
+# CONVEX_SITE_ORIGIN = URL racine pour le container Convex (sans path)
+CONVEX_SITE_ORIGIN=https://$DOMAIN
 # URL publique du frontend (pour CORS Better Auth)
 SITE_URL=https://$DOMAIN
 
@@ -250,7 +252,7 @@ setup_convex() {
     sh -c "
       npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local &&
       npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
-      npx convex env set BETTER_AUTH_URL '$CONVEX_SITE_URL_VAL' &&
+      npx convex env set BETTER_AUTH_URL '$CONVEX_SITE_URL_VAL/api/auth' &&
       npx convex env set SITE_URL '$SITE_URL_VAL' &&
       npx convex env set RESOLVER_REGISTER_TOKEN '$RESOLVER_TOKEN'
     " || fail "Configuration des variables Convex échouée"
