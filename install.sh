@@ -147,7 +147,6 @@ setup_firewall() {
   ufw allow 22/tcp >/dev/null || true
   ufw allow 80/tcp >/dev/null || true
   ufw allow 443/tcp >/dev/null || true
-  ufw allow 8443/tcp >/dev/null || true
   ufw allow "${MEDIASOUP_MIN_PORT}:${MEDIASOUP_MAX_PORT}/udp" >/dev/null || true
   ufw allow "${MEDIASOUP_MIN_PORT}:${MEDIASOUP_MAX_PORT}/tcp" >/dev/null || true
   ufw --force enable >/dev/null || true
