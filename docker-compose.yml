@@ -16,7 +16,11 @@ services:
     volumes:
       - convex_data:/convex/data
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3210/version"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:3210/version || wget -qO- http://localhost:3210/version",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
