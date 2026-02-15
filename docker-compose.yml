@@ -59,7 +59,7 @@ services:
     environment:
       - CONVEX_SELF_HOSTED_URL=http://convex:3210
       - CONVEX_SELF_HOSTED_ADMIN_KEY=${CONVEX_ADMIN_KEY}
-    command: sh -c "npm install && npx convex deploy --url http://convex:3210 --admin-key $$CONVEX_SELF_HOSTED_ADMIN_KEY"
+    command: sh -c "npm install --legacy-peer-deps && npx convex deploy --url http://convex:3210 --admin-key $$CONVEX_SELF_HOSTED_ADMIN_KEY"
     depends_on:
       - convex
     restart: "no"
