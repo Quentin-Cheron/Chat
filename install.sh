@@ -231,7 +231,7 @@ setup_convex() {
     -v "$APP_DIR/web:/app" \
     -w /app \
     node:20-alpine \
-    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && sed -i '/^CONVEX_DEPLOYMENT/d' .env.local 2>/dev/null || true && npx convex deploy --yes" \
+    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local && npx convex deploy --yes" \
     || fail "Déploiement des fonctions Convex échoué"
 
   # Setter les variables d'environnement
@@ -250,7 +250,7 @@ setup_convex() {
     -w /app \
     node:20-alpine \
     sh -c "
-      npm install -g pnpm && pnpm install --no-frozen-lockfile &&
+      npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local &&
       npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
       npx convex env set BETTER_AUTH_URL '$CONVEX_SITE_URL_VAL' &&
       npx convex env set SITE_URL '$SITE_URL_VAL' &&
