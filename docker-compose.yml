@@ -10,6 +10,7 @@ services:
       - CONVEX_CLOUD_ORIGIN=http://convex:3210
       - CONVEX_SITE_ORIGIN=${INSTANCE_PUBLIC_URL:-http://localhost}
       - SITE_URL=${INSTANCE_PUBLIC_URL:-http://localhost}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
     volumes:
       - convex_data:/convex/data
 
