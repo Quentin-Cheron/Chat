@@ -22,9 +22,9 @@ type Message = {
   _id: string;
   _creationTime: number;
   channelId: string;
-  userId: string;
-  body: string;
-  senderName?: string;
+  authorId: string;
+  content: string;
+  authorName: string;
 };
 
 type VoiceParticipant = { peerId: string; name: string; email: string };
@@ -99,13 +99,15 @@ export function MessagePanel({
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            {isVoiceChannel ? "No messages in this voice channel." : "No messages yet. Say hello!"}
+            {isVoiceChannel
+              ? "No messages in this voice channel."
+              : "No messages yet. Say hello!"}
           </div>
         ) : (
           <ul className="space-y-1">
             {messages.map((msg, i) => {
               const prevMsg = messages[i - 1];
-              const sameUser = prevMsg && prevMsg.userId === msg.userId;
+              const sameUser = prevMsg && prevMsg.authorId === msg.authorId;
               const time = new Date(msg._creationTime).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -113,14 +115,17 @@ export function MessagePanel({
               return (
                 <li
                   key={msg._id}
-                  className={cn("group flex items-start gap-3 rounded-lg px-2 py-0.5 hover:bg-surface-3", {
-                    "mt-3": !sameUser,
-                  })}
+                  className={cn(
+                    "group flex items-start gap-3 rounded-lg px-2 py-0.5 hover:bg-surface-3",
+                    {
+                      "mt-3": !sameUser,
+                    },
+                  )}
                 >
                   {/* Avatar */}
                   {!sameUser ? (
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-4 text-xs font-bold text-foreground">
-                      {(msg.senderName ?? "?").charAt(0).toUpperCase()}
+                      {(msg.authorName ?? "?").charAt(0).toUpperCase()}
                     </div>
                   ) : (
                     <div className="w-8 shrink-0" />
@@ -130,12 +135,16 @@ export function MessagePanel({
                     {!sameUser && (
                       <div className="flex items-baseline gap-2">
                         <span className="text-sm font-semibold text-foreground">
-                          {msg.senderName ?? "Unknown"}
+                          {msg.authorName ?? "Unknown"}
                         </span>
-                        <span className="text-[10px] text-muted-foreground">{time}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {time}
+                        </span>
                       </div>
                     )}
-                    <p className="break-words text-sm text-foreground/90">{msg.body}</p>
+                    <p className="break-words text-sm text-foreground/90">
+                      {msg.content}
+                    </p>
                   </div>
                 </li>
               );
@@ -165,7 +174,9 @@ export function MessagePanel({
             <Button
               type="submit"
               size="sm"
-              disabled={!messageDraft.trim() || pendingMutations.has("sendMessage")}
+              disabled={
+                !messageDraft.trim() || pendingMutations.has("sendMessage")
+              }
               className="h-10 w-10 shrink-0 p-0"
             >
               <Send className="h-4 w-4" />

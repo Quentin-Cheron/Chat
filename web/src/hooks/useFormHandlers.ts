@@ -18,7 +18,9 @@ export function useFormHandlers() {
   const [channelType, setChannelType] = useState<"TEXT" | "VOICE">("TEXT");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteLink, setInviteLink] = useState("");
-  const [pendingMutations, setPendingMutations] = useState<Set<string>>(new Set());
+  const [pendingMutations, setPendingMutations] = useState<Set<string>>(
+    new Set(),
+  );
   const [mutationError, setMutationError] = useState("");
 
   // Convex mutations
@@ -32,7 +34,10 @@ export function useFormHandlers() {
   const updateRoleMutation = useMutation(api.members.updateRole);
   const kickMemberMutation = useMutation(api.members.kick);
 
-  function withPending<T>(key: string, fn: () => Promise<T>): Promise<T | undefined> {
+  function withPending<T>(
+    key: string,
+    fn: () => Promise<T>,
+  ): Promise<T | undefined> {
     setPendingMutations((prev) => new Set([...prev, key]));
     setMutationError("");
     return fn()
@@ -98,7 +103,7 @@ export function useFormHandlers() {
       await withPending("sendMessage", () =>
         sendMessageMutation({
           channelId: selectedChannelId as Id<"channels">,
-          body: draft,
+          content: draft,
         }),
       );
     },
@@ -110,7 +115,9 @@ export function useFormHandlers() {
       e.preventDefault();
       if (!selectedWorkspaceId) return;
       const result = await withPending("generateInvite", () =>
-        createInviteMutation({ workspaceId: selectedWorkspaceId as Id<"workspaces"> }),
+        createInviteMutation({
+          workspaceId: selectedWorkspaceId as Id<"workspaces">,
+        }),
       );
       if (result) {
         setInviteLink(
