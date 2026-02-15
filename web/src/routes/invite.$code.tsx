@@ -1,9 +1,9 @@
-import { joinInvite } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { useMutation } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { LogIn, MessageSquareMore, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/invite/$code")({
   component: InvitePage,
@@ -16,32 +16,39 @@ function InvitePage() {
   const [joinState, setJoinState] = useState<"idle" | "joining" | "done">(
     "idle",
   );
+  const [joinError, setJoinError] = useState<string | null>(null);
 
-  const joinMutation = useMutation({
-    mutationFn: (inviteCode: string) => joinInvite(inviteCode),
-    onSuccess: async () => {
-      setJoinState("done");
-      await navigate({ to: "/app" });
-    },
-  });
+  const joinInviteMut = useMutation(api.invites.join);
 
   useEffect(() => {
     if (isPending || !session?.user || joinState !== "idle") return;
     setJoinState("joining");
-    joinMutation.mutate(code);
-  }, [code, isPending, joinMutation, joinState, session?.user]);
+    joinInviteMut({ code })
+      .then(() => {
+        setJoinState("done");
+        return navigate({ to: "/app" });
+      })
+      .catch((e: unknown) => {
+        setJoinError(
+          e instanceof Error
+            ? e.message
+            : "Impossible de rejoindre cet espace.",
+        );
+        setJoinState("idle");
+      });
+  }, [code, isPending, joinInviteMut, joinState, session?.user, navigate]);
 
   const errorMessage = useMemo(() => {
-    const mutationError = joinMutation.error;
-    if (!mutationError) return null;
-    if (!(mutationError instanceof Error))
-      return "Impossible de rejoindre cet espace.";
-    if (mutationError.message.includes("Invite not found"))
+    if (!joinError) return null;
+    if (
+      joinError.includes("Invite not found") ||
+      joinError.includes("introuvable")
+    )
       return "Invitation introuvable. Vérifiez votre code d'accès.";
-    if (mutationError.message.includes("Invite expired"))
+    if (joinError.includes("expir"))
       return "Invitation expirée. Demandez un nouveau code.";
-    return mutationError.message;
-  }, [joinMutation.error]);
+    return joinError;
+  }, [joinError]);
 
   if (isPending) {
     return (
@@ -112,7 +119,7 @@ function InvitePage() {
             Code: {code}
           </p>
 
-          {joinMutation.isPending || joinState === "joining" ? (
+          {joinState === "joining" ? (
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               Association de votre compte en cours...

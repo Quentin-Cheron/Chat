@@ -1,5 +1,4 @@
 import { Input } from "@/components/ui/input";
-import { getPasswordStatus } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { MessageSquareMore } from "lucide-react";
@@ -33,17 +32,7 @@ function LoginPage() {
       setError(signInError.message || "Connexion échouée");
       return;
     }
-
-    try {
-      const status = await getPasswordStatus();
-      if (status.mustChangePassword) {
-        await navigate({ to: "/security/change-password" });
-        return;
-      }
-    } catch {
-      // Si le check échoue, on continue normalement
-    }
-
+    // Le check mustChangePassword se fait dans /app via la query Convex api.users.getPasswordStatus
     await navigate({ to: search.redirect || "/app" });
   }
 

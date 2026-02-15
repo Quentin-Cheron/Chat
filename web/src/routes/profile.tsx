@@ -1,7 +1,5 @@
 import { Input } from "@/components/ui/input";
-import { getProfile, updateProfile } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { User } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
@@ -13,14 +11,10 @@ export const Route = createFileRoute("/profile")({
 function ProfilePage() {
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const profileQuery = useQuery({
-    queryKey: ["profile"],
-    queryFn: getProfile,
-    enabled: Boolean(session?.user),
-  });
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!sessionPending && !session?.user) {
@@ -29,39 +23,32 @@ function ProfilePage() {
   }, [navigate, session?.user, sessionPending]);
 
   useEffect(() => {
-    if (profileQuery.data?.name) {
-      setName(profileQuery.data.name);
+    if (session?.user?.name) {
+      setName(session.user.name);
     }
-  }, [profileQuery.data?.name]);
+  }, [session?.user?.name]);
 
-  const updateMutation = useMutation({
-    mutationFn: () => updateProfile({ name }),
-    onSuccess: async () => {
-      setError(null);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 2000);
-      await profileQuery.refetch();
-    },
-    onError: (mutationError) => {
-      setError(
-        mutationError instanceof Error
-          ? mutationError.message
-          : "Mise à jour impossible.",
-      );
-    },
-  });
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     if (name.trim().length < 2) {
       setError("Le nom doit contenir au moins 2 caractères.");
       return;
     }
-    updateMutation.mutate();
+    setSaving(true);
+    const { error: updateError } = await authClient.updateUser({
+      name: name.trim(),
+    });
+    setSaving(false);
+    if (updateError) {
+      setError(updateError.message || "Mise à jour impossible.");
+      return;
+    }
+    setSuccess(true);
+    setTimeout(() => setSuccess(false), 2000);
   }
 
-  if (sessionPending || profileQuery.isPending) {
+  if (sessionPending) {
     return (
       <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
         Chargement du profil...
@@ -69,7 +56,8 @@ function ProfilePage() {
     );
   }
 
-  const initials = (profileQuery.data?.name || profileQuery.data?.email || "?")
+  const user = session?.user;
+  const initials = (user?.name || user?.email || "?")
     .split(" ")
     .map((w) => w[0])
     .join("")
@@ -84,11 +72,9 @@ function ProfilePage() {
         </div>
         <div>
           <h1 className="text-lg font-bold text-foreground">
-            {profileQuery.data?.name || "—"}
+            {user?.name || "—"}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {profileQuery.data?.email || "—"}
-          </p>
+          <p className="text-sm text-muted-foreground">{user?.email || "—"}</p>
         </div>
       </div>
 
@@ -97,7 +83,7 @@ function ProfilePage() {
           Email
         </p>
         <p className="text-sm font-medium text-foreground">
-          {profileQuery.data?.email || "—"}
+          {user?.email || "—"}
         </p>
         <p className="mt-1 text-xs text-muted-foreground/60">
           Pour changer l'email, rendez-vous dans Paramètres → Compte.
@@ -123,12 +109,10 @@ function ProfilePage() {
           ) : null}
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={saving}
             className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {updateMutation.isPending
-              ? "Mise à jour..."
-              : "Enregistrer le profil"}
+            {saving ? "Mise à jour..." : "Enregistrer le profil"}
           </button>
         </form>
       </div>

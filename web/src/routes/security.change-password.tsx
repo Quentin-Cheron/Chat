@@ -1,10 +1,10 @@
 import { Input } from "@/components/ui/input";
-import { changePassword, getPasswordStatus } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery } from "convex/react";
 import { ShieldAlert } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/security/change-password")({
   component: SecurityChangePasswordPage,
@@ -17,27 +17,14 @@ function SecurityChangePasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const statusQuery = useQuery({
-    queryKey: ["password-status"],
-    queryFn: getPasswordStatus,
-    enabled: Boolean(session?.user),
-  });
-
-  const mutation = useMutation({
-    mutationFn: () => changePassword({ currentPassword, newPassword }),
-    onSuccess: async () => {
-      await statusQuery.refetch();
-      await navigate({ to: "/app" });
-    },
-    onError: (mutationError) => {
-      setError(
-        mutationError instanceof Error
-          ? mutationError.message
-          : "Échec du changement de mot de passe.",
-      );
-    },
-  });
+  const passwordStatus = useQuery(
+    api.users.getPasswordStatus,
+    session?.user ? {} : "skip",
+  );
+  const changePasswordMut = useMutation(api.users.changePassword);
+  const clearMustChange = useMutation(api.users.clearMustChangePassword);
 
   useEffect(() => {
     if (sessionPending) return;
@@ -48,12 +35,12 @@ function SecurityChangePasswordPage() {
       });
       return;
     }
-    if (statusQuery.data && !statusQuery.data.mustChangePassword) {
+    if (passwordStatus && !passwordStatus.mustChangePassword) {
       void navigate({ to: "/app" });
     }
-  }, [navigate, session?.user, sessionPending, statusQuery.data]);
+  }, [navigate, session?.user, sessionPending, passwordStatus]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     if (newPassword.length < 10) {
@@ -64,10 +51,21 @@ function SecurityChangePasswordPage() {
       setError("La confirmation du nouveau mot de passe ne correspond pas.");
       return;
     }
-    mutation.mutate();
+    setPending(true);
+    try {
+      await changePasswordMut({ currentPassword, newPassword });
+      await clearMustChange({});
+      await navigate({ to: "/app" });
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Échec du changement de mot de passe.",
+      );
+    } finally {
+      setPending(false);
+    }
   }
 
-  if (sessionPending || statusQuery.isPending) {
+  if (sessionPending || passwordStatus === undefined) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
@@ -160,12 +158,10 @@ function SecurityChangePasswordPage() {
 
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={pending}
               className="mt-1 w-full rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              {mutation.isPending
-                ? "Mise à jour..."
-                : "Mettre à jour le mot de passe"}
+              {pending ? "Mise à jour..." : "Mettre à jour le mot de passe"}
             </button>
           </form>
         </div>

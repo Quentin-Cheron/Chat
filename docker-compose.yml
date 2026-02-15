@@ -1,4 +1,17 @@
 services:
+  convex:
+    image: ghcr.io/get-convex/convex-backend:latest
+    container_name: privatechat-convex
+    restart: unless-stopped
+    ports:
+      - "3210:3210"
+    environment:
+      - CONVEX_CLOUD_ORIGIN=http://convex:3210
+      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_URL:-http://localhost:3210}
+      - SITE_URL=${CONVEX_SITE_URL:-http://localhost:3210}
+    volumes:
+      - convex_data:/convex/data
+
   caddy:
     image: caddy:2.8
     container_name: privatechat-caddy
@@ -18,6 +31,7 @@ services:
     depends_on:
       - web
       - api
+      - convex
 
   web:
     build:
@@ -29,6 +43,8 @@ services:
         - VITE_TURN_URL=${VITE_TURN_URL}
         - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
         - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
+        - VITE_CONVEX_URL=${VITE_CONVEX_URL:-http://localhost:3210}
+        - VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL:-http://localhost:3210}
     image: privatechat-web:local
     container_name: privatechat-web
     restart: unless-stopped
@@ -43,46 +59,14 @@ services:
     container_name: privatechat-api
     restart: unless-stopped
     environment:
-      - PORT=3000
-      - APP_NAME=${APP_NAME}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - DOMAIN=${DOMAIN}
+      - PORT=3001
       - NODE_ENV=${NODE_ENV}
-      - DATABASE_URL=${DATABASE_URL}
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
-      - CONTROL_PLANE_URL=${CONTROL_PLANE_URL}
-      - INSTANCE_PUBLIC_URL=${INSTANCE_PUBLIC_URL}
-      - RESOLVER_REGISTER_TOKEN=${RESOLVER_REGISTER_TOKEN}
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP}
-      - MEDIASOUP_MIN_PORT=${MEDIASOUP_MIN_PORT}
-      - MEDIASOUP_MAX_PORT=${MEDIASOUP_MAX_PORT}
+      - MEDIASOUP_MIN_PORT=${MEDIASOUP_MIN_PORT:-40000}
+      - MEDIASOUP_MAX_PORT=${MEDIASOUP_MAX_PORT:-40100}
     ports:
       - "${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40100}:${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40100}/udp"
       - "${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40100}:${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40100}/tcp"
-    depends_on:
-      - postgres
-      - redis
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: privatechat-postgres
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    container_name: privatechat-redis
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
 
   desktop-builder:
     build:
@@ -102,8 +86,7 @@ services:
     command: sh -lc "npm install && npm run tauri build"
 
 volumes:
-  postgres_data:
-  redis_data:
+  convex_data:
   caddy_data:
   caddy_config:
   cargo_cache:

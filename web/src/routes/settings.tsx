@@ -1,11 +1,11 @@
 import { Input } from "@/components/ui/input";
-import { changePassword, getProfile, updateAccount } from "@/lib/api";
 import { readAudioSettings, writeAudioSettings } from "@/lib/audio-settings";
 import { authClient } from "@/lib/auth-client";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { Bell, Mic, Shield, User } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -25,14 +25,13 @@ const NOTIFICATION_SETTINGS_KEY = "privatechat_notification_settings_v1";
 function readNotificationSettings(): NotificationSettings {
   try {
     const raw = window.localStorage.getItem(NOTIFICATION_SETTINGS_KEY);
-    if (!raw) {
+    if (!raw)
       return {
         muteAll: false,
         messageSounds: true,
         voiceSounds: true,
         desktopAlerts: true,
       };
-    }
     const parsed = JSON.parse(raw) as Partial<NotificationSettings>;
     return {
       muteAll: parsed.muteAll ?? false,
@@ -57,7 +56,7 @@ function writeNotificationSettings(value: NotificationSettings) {
       JSON.stringify(value),
     );
   } catch {
-    // ignore storage failures
+    /* ignore */
   }
 }
 
@@ -71,11 +70,9 @@ const TABS: { id: SettingsTab; label: string; icon: typeof User }[] = [
 function SettingsPage() {
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const profileQuery = useQuery({
-    queryKey: ["profile"],
-    queryFn: getProfile,
-    enabled: Boolean(session?.user),
-  });
+
+  const updateUserMut = useMutation(api.users.updateUser);
+  const changePasswordMut = useMutation(api.users.changePassword);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("account");
   const [name, setName] = useState("");
@@ -87,6 +84,8 @@ function SettingsPage() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [settingsSuccess, setSettingsSuccess] = useState<string | null>(null);
+  const [accountPending, setAccountPending] = useState(false);
+  const [passwordPending, setPasswordPending] = useState(false);
 
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -97,7 +96,6 @@ function SettingsPage() {
   const [monitorEnabled, setMonitorEnabled] = useState(true);
   const [voiceThreshold, setVoiceThreshold] = useState(22);
   const [pushToTalkActive, setPushToTalkActive] = useState(false);
-
   const [notificationSettings, setNotificationSettings] =
     useState<NotificationSettings>(readNotificationSettings);
 
@@ -113,11 +111,11 @@ function SettingsPage() {
   }, [navigate, session?.user, sessionPending]);
 
   useEffect(() => {
-    if (profileQuery.data) {
-      setName(profileQuery.data.name || "");
-      setEmail(profileQuery.data.email || "");
+    if (session?.user) {
+      setName(session.user.name || "");
+      setEmail(session.user.email || "");
     }
-  }, [profileQuery.data]);
+  }, [session?.user]);
 
   useEffect(() => {
     void refreshDevices();
@@ -137,52 +135,11 @@ function SettingsPage() {
     writeNotificationSettings(notificationSettings);
   }, [notificationSettings]);
 
-  const accountMutation = useMutation({
-    mutationFn: () =>
-      updateAccount({
-        name,
-        email,
-        currentPassword: currentPasswordForEmail || undefined,
-      }),
-    onSuccess: async () => {
-      setSettingsError(null);
-      setCurrentPasswordForEmail("");
-      setSettingsSuccess("Compte mis à jour.");
-      await profileQuery.refetch();
-    },
-    onError: (error) => {
-      setSettingsSuccess(null);
-      setSettingsError(
-        error instanceof Error ? error.message : "Mise à jour impossible.",
-      );
-    },
-  });
-
-  const passwordMutation = useMutation({
-    mutationFn: () => changePassword({ currentPassword, newPassword }),
-    onSuccess: () => {
-      setPasswordError(null);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setSettingsSuccess("Mot de passe mis à jour.");
-    },
-    onError: (error) => {
-      setSettingsSuccess(null);
-      setPasswordError(
-        error instanceof Error ? error.message : "Changement impossible.",
-      );
-    },
-  });
-
   const emailChanged = useMemo(
     () =>
-      Boolean(
-        profileQuery.data?.email && email && profileQuery.data.email !== email,
-      ),
-    [email, profileQuery.data?.email],
+      Boolean(session?.user?.email && email && session.user.email !== email),
+    [email, session?.user?.email],
   );
-
   const isVoiceDetected = micLevel >= voiceThreshold;
 
   async function refreshDevices() {
@@ -219,7 +176,6 @@ function SettingsPage() {
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       micStreamRef.current = stream;
-
       const monitor = new Audio();
       monitor.autoplay = true;
       monitor.muted = true;
@@ -232,7 +188,6 @@ function SettingsPage() {
       }
       await monitor.play().catch(() => undefined);
       monitorAudioRef.current = monitor;
-
       const ctx = new AudioContext();
       audioContextRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
@@ -240,7 +195,6 @@ function SettingsPage() {
       analyser.fftSize = 512;
       source.connect(analyser);
       const data = new Uint8Array(analyser.fftSize);
-
       const tick = () => {
         analyser.getByteTimeDomainData(data);
         let sum = 0;
@@ -295,7 +249,7 @@ function SettingsPage() {
     setAudioSettings(updated);
   }
 
-  function onUpdateAccount(event: FormEvent<HTMLFormElement>) {
+  async function onUpdateAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSettingsError(null);
     setSettingsSuccess(null);
@@ -313,10 +267,31 @@ function SettingsPage() {
       );
       return;
     }
-    accountMutation.mutate();
+    setAccountPending(true);
+    try {
+      // Update name via Convex mutation
+      await updateUserMut({ name: name.trim() });
+      // Update email via authClient if changed
+      if (emailChanged) {
+        const { error } = await authClient.changeEmail({
+          newEmail: email,
+          callbackURL: window.location.origin,
+        });
+        if (error)
+          throw new Error(error.message || "Changement email impossible.");
+      }
+      setCurrentPasswordForEmail("");
+      setSettingsSuccess("Compte mis à jour.");
+    } catch (e) {
+      setSettingsError(
+        e instanceof Error ? e.message : "Mise à jour impossible.",
+      );
+    } finally {
+      setAccountPending(false);
+    }
   }
 
-  function onChangePassword(event: FormEvent<HTMLFormElement>) {
+  async function onChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordError(null);
     setSettingsSuccess(null);
@@ -334,10 +309,23 @@ function SettingsPage() {
       setPasswordError("La confirmation ne correspond pas.");
       return;
     }
-    passwordMutation.mutate();
+    setPasswordPending(true);
+    try {
+      await changePasswordMut({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSettingsSuccess("Mot de passe mis à jour.");
+    } catch (e) {
+      setPasswordError(
+        e instanceof Error ? e.message : "Changement impossible.",
+      );
+    } finally {
+      setPasswordPending(false);
+    }
   }
 
-  if (sessionPending || profileQuery.isPending) {
+  if (sessionPending) {
     return (
       <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
         Chargement des paramètres...
@@ -377,10 +365,13 @@ function SettingsPage() {
       <div className="rounded-xl border border-surface-3 bg-surface p-6">
         <div className="mb-6">
           <h2 className="text-xl font-bold text-foreground">
-            {activeTab === "account" ? "Compte" : null}
-            {activeTab === "security" ? "Sécurité" : null}
-            {activeTab === "audio" ? "Audio" : null}
-            {activeTab === "notifications" ? "Notifications" : null}
+            {activeTab === "account"
+              ? "Compte"
+              : activeTab === "security"
+                ? "Sécurité"
+                : activeTab === "audio"
+                  ? "Audio"
+                  : "Notifications"}
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {activeTab === "account"
@@ -441,10 +432,10 @@ function SettingsPage() {
             ) : null}
             <button
               type="submit"
-              disabled={accountMutation.isPending}
+              disabled={accountPending}
               className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              {accountMutation.isPending ? "Mise à jour..." : "Enregistrer"}
+              {accountPending ? "Mise à jour..." : "Enregistrer"}
             </button>
           </form>
         ) : null}
@@ -492,12 +483,10 @@ function SettingsPage() {
             ) : null}
             <button
               type="submit"
-              disabled={passwordMutation.isPending}
+              disabled={passwordPending}
               className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              {passwordMutation.isPending
-                ? "Mise à jour..."
-                : "Changer le mot de passe"}
+              {passwordPending ? "Mise à jour..." : "Changer le mot de passe"}
             </button>
           </form>
         ) : null}
@@ -520,7 +509,6 @@ function SettingsPage() {
                 Rafraîchir
               </button>
             </div>
-
             <div className="grid gap-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Micro (entrée)
@@ -533,14 +521,13 @@ function SettingsPage() {
                 className="h-10 rounded-lg border border-surface-3 bg-surface-2 px-3 text-sm text-foreground outline-none focus:border-accent/50"
               >
                 <option value="">Défaut système</option>
-                {inputDevices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Micro ${device.deviceId.slice(0, 6)}`}
+                {inputDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Micro ${d.deviceId.slice(0, 6)}`}
                   </option>
                 ))}
               </select>
             </div>
-
             <div className="grid gap-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Sortie (haut-parleur)
@@ -553,14 +540,13 @@ function SettingsPage() {
                 className="h-10 rounded-lg border border-surface-3 bg-surface-2 px-3 text-sm text-foreground outline-none focus:border-accent/50"
               >
                 <option value="">Défaut système</option>
-                {outputDevices.map((device) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Sortie ${device.deviceId.slice(0, 6)}`}
+                {outputDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Sortie ${d.deviceId.slice(0, 6)}`}
                   </option>
                 ))}
               </select>
             </div>
-
             <div className="grid gap-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Seuil de détection voix ({voiceThreshold})
@@ -574,14 +560,12 @@ function SettingsPage() {
                 className="accent-accent"
               />
             </div>
-
             <div className="overflow-hidden rounded-lg bg-surface-2 p-1">
               <div
                 className={`h-2 rounded-full transition-all duration-75 ${isVoiceDetected ? "bg-success" : "bg-accent/50"}`}
                 style={{ width: `${micLevel}%` }}
               />
             </div>
-
             <div className="flex flex-wrap gap-2">
               {!isTestingMic ? (
                 <button
@@ -614,7 +598,6 @@ function SettingsPage() {
                 </>
               )}
             </div>
-
             <p className="text-xs text-muted-foreground/70">
               "Maintenir pour s'entendre" simule un mode push-to-talk de test.
             </p>
