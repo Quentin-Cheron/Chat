@@ -219,7 +219,9 @@ deploy_stack() {
 
   if [ -n "$INSTANCE_NAME" ] && [ -n "$INSTANCE_SECRET" ]; then
     CONVEX_ADMIN_KEY="${INSTANCE_NAME}|${INSTANCE_SECRET}"
-    sed -i "s#CONVEX_ADMIN_KEY=.*#CONVEX_ADMIN_KEY=${CONVEX_ADMIN_KEY}#" "$ENV_FILE"
+    grep -v '^CONVEX_ADMIN_KEY=' "$ENV_FILE" > "${ENV_FILE}.tmp"
+    printf 'CONVEX_ADMIN_KEY=%s\n' "${CONVEX_ADMIN_KEY}" >> "${ENV_FILE}.tmp"
+    mv "${ENV_FILE}.tmp" "$ENV_FILE"
     log "Clé admin Convex récupérée"
   else
     fail "Impossible de récupérer la clé admin Convex"
