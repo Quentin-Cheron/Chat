@@ -1,0 +1,9 @@
+{
+  "name": "privatechat",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "convex": "^1.17.4",
+    "@convex-dev/better-auth": "^0.10.10"
+  }
+}

@@ -5,19 +5,25 @@ ARG VITE_PUBLIC_JOIN_BASE_URL=""
 ARG VITE_TURN_URL=""
 ARG VITE_TURN_USERNAME=""
 ARG VITE_TURN_PASSWORD=""
+ARG VITE_CONVEX_URL=""
+ARG VITE_CONVEX_SITE_URL=""
 ENV VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
 ENV VITE_PUBLIC_JOIN_BASE_URL=${VITE_PUBLIC_JOIN_BASE_URL}
 ENV VITE_TURN_URL=${VITE_TURN_URL}
 ENV VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
 ENV VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
+ENV VITE_CONVEX_URL=${VITE_CONVEX_URL}
+ENV VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL}
 
-COPY package*.json ./
+COPY web/package*.json ./
 RUN npm install --include=dev
 
-COPY . .
+COPY web/ .
+COPY convex/_generated ./convex/_generated
+
 RUN npm run build
 
 FROM nginx:alpine
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY web/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
