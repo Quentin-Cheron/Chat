@@ -179,24 +179,13 @@ download_project() {
 
 gen_env() {
   log "Génération .env"
-  DB_PASSWORD="$(openssl rand -hex 24)"
-  BETTER_AUTH_SECRET="$(openssl rand -hex 32)"
   cat > "$ENV_FILE" <<ENV
 APP_NAME=privatechat
 DOMAIN=$DOMAIN
 ADMIN_EMAIL=$ADMIN_EMAIL
 ADMIN_PASSWORD=$ADMIN_PASSWORD
-POSTGRES_DB=privatechat
-POSTGRES_USER=privatechat
-POSTGRES_PASSWORD=$DB_PASSWORD
-DATABASE_URL=postgresql://privatechat:$DB_PASSWORD@postgres:5432/privatechat
-JWT_SECRET=$(openssl rand -hex 32)
-INVITE_SECRET=$(openssl rand -hex 32)
-BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
-BETTER_AUTH_URL=https://$DOMAIN
-REDIS_URL=redis://redis:6379
-CONTROL_PLANE_URL=$CONTROL_PLANE_URL
 INSTANCE_PUBLIC_URL=$INSTANCE_PUBLIC_URL
+CONTROL_PLANE_URL=$CONTROL_PLANE_URL
 RESOLVER_REGISTER_TOKEN=$RESOLVER_REGISTER_TOKEN
 VITE_RESOLVER_BASE_URL=$VITE_RESOLVER_BASE_URL
 VITE_PUBLIC_JOIN_BASE_URL=$VITE_PUBLIC_JOIN_BASE_URL
@@ -207,19 +196,43 @@ MEDIASOUP_ANNOUNCED_IP=$MEDIASOUP_ANNOUNCED_IP
 MEDIASOUP_MIN_PORT=$MEDIASOUP_MIN_PORT
 MEDIASOUP_MAX_PORT=$MEDIASOUP_MAX_PORT
 NODE_ENV=production
+CONVEX_ADMIN_KEY=
 ENV
 }
 
 deploy_stack() {
   log "Déploiement stack docker"
   cd "$APP_DIR"
+
+  # Démarrer Convex en premier pour récupérer la clé admin
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d convex
+  log "Attente démarrage Convex..."
+  for i in $(seq 1 30); do
+    if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'test -f /convex/data/credentials/instance_secret' 2>/dev/null; then
+      break
+    fi
+    sleep 2
+  done
+
+  INSTANCE_NAME="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'cat /convex/data/credentials/instance_name' 2>/dev/null | tr -d '[:space:]')"
+  INSTANCE_SECRET="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'cat /convex/data/credentials/instance_secret' 2>/dev/null | tr -d '[:space:]')"
+
+  if [ -n "$INSTANCE_NAME" ] && [ -n "$INSTANCE_SECRET" ]; then
+    CONVEX_ADMIN_KEY="${INSTANCE_NAME}|${INSTANCE_SECRET}"
+    sed -i "s|CONVEX_ADMIN_KEY=.*|CONVEX_ADMIN_KEY=${CONVEX_ADMIN_KEY}|" "$ENV_FILE"
+    log "Clé admin Convex récupérée"
+  else
+    fail "Impossible de récupérer la clé admin Convex"
+  fi
+
+  # Déployer tout le reste
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile selfhost up -d --build
 }
 
 health_check() {
   log "Vérification locale"
-  sleep 4
-  curl -fsS "http://localhost/api/health" >/dev/null || fail "API health KO"
+  sleep 6
+  curl -fsS "http://localhost" >/dev/null || fail "Web KO"
 }
 
 final_output() {
