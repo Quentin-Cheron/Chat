@@ -14,11 +14,16 @@
     Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss: ws:;"
   }
 
-  @api path /api/*
-  reverse_proxy @api api:3000
+  # Convex HTTP API + WebSocket sync
+  @convex path /api/*
+  reverse_proxy @convex convex:3210
 
+  # Voice server Socket.io
   @socketio path /socket.io*
-  reverse_proxy @socketio api:3000
+  reverse_proxy @socketio api:3001
+
+  @ws path /ws*
+  reverse_proxy @ws api:3001
 
   reverse_proxy web:80
 }
