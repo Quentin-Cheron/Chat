@@ -227,10 +227,11 @@ setup_convex() {
     --network "$(docker compose ls -q | head -1)_default" \
     -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
     -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -e CONVEX_DEPLOYMENT="" \
     -v "$APP_DIR/web:/app" \
     -w /app \
     node:20-alpine \
-    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && npx convex deploy --yes" \
+    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && sed -i '/^CONVEX_DEPLOYMENT/d' .env.local 2>/dev/null || true && npx convex deploy --yes" \
     || fail "Déploiement des fonctions Convex échoué"
 
   # Setter les variables d'environnement
@@ -244,6 +245,7 @@ setup_convex() {
     --network "$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)" \
     -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
     -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -e CONVEX_DEPLOYMENT="" \
     -v "$APP_DIR/web:/app" \
     -w /app \
     node:20-alpine \
