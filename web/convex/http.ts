@@ -1,12 +1,34 @@
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
-import { authComponent, createAuth } from "./betterAuth/auth";
+import { createAuth } from "./betterAuth/auth";
 
 const http = httpRouter();
 
-// CORS requis pour les SPA React (cross-origin auth)
-authComponent.registerRoutes(http, createAuth, { cors: true });
+// ── Better Auth HTTP handler ──────────────────────────────────────────────────
+// Handles all /api/auth/* routes (sign-in, sign-up, get-session, etc.)
+const authHandler = httpAction(async (ctx, request) => {
+  const auth = createAuth(ctx as any);
+  const response = await auth.handler(request);
+  return response;
+});
+
+// Register all Better Auth routes under /api/auth/
+http.route({
+  pathPrefix: "/api/auth/",
+  method: "GET",
+  handler: authHandler,
+});
+http.route({
+  pathPrefix: "/api/auth/",
+  method: "POST",
+  handler: authHandler,
+});
+http.route({
+  path: "/api/auth",
+  method: "GET",
+  handler: authHandler,
+});
 
 // ── Resolver HTTP routes ──────────────────────────────────────────────────────
 
@@ -14,7 +36,6 @@ function checkResolverToken(request: Request): boolean {
   const token = request.headers.get("x-resolver-token");
   const expected = process.env.RESOLVER_REGISTER_TOKEN;
   if (!token || !expected || token.length !== expected.length) return false;
-  // constant-time comparison
   let diff = 0;
   for (let i = 0; i < token.length; i++) {
     diff |= token.charCodeAt(i) ^ expected.charCodeAt(i);
@@ -32,7 +53,6 @@ function cors(body: string, status = 200): Response {
   });
 }
 
-// GET /api/resolver/resolve/:code
 http.route({
   pathPrefix: "/api/resolver/resolve/",
   method: "GET",
@@ -41,7 +61,6 @@ http.route({
     const code = url.pathname.replace(/^\/api\/resolver\/resolve\//, "");
     try {
       const result = await ctx.runQuery(internal.resolver.resolve, { code });
-      // increment count (fire-and-forget style via mutation)
       await ctx.runMutation(internal.resolver.incrementResolveCount, {
         code: result.code,
       });
@@ -58,7 +77,6 @@ http.route({
   }),
 });
 
-// POST /api/resolver/register
 http.route({
   path: "/api/resolver/register",
   method: "POST",
@@ -91,7 +109,6 @@ http.route({
   }),
 });
 
-// GET /api/resolver/stats
 http.route({
   path: "/api/resolver/stats",
   method: "GET",
@@ -104,7 +121,6 @@ http.route({
   }),
 });
 
-// DELETE /api/resolver/expired
 http.route({
   path: "/api/resolver/expired",
   method: "DELETE",
