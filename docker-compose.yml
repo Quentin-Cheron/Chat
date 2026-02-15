@@ -43,8 +43,8 @@ services:
         - VITE_TURN_URL=${VITE_TURN_URL}
         - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
         - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
-        - VITE_CONVEX_URL=${VITE_CONVEX_URL:-http://localhost:3210}
-        - VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL:-http://localhost:3210}
+        - VITE_CONVEX_URL=${PUBLIC_URL:-http://localhost}
+        - VITE_CONVEX_SITE_URL=${PUBLIC_URL:-http://localhost}
     image: privatechat-web:local
     container_name: privatechat-web
     restart: unless-stopped
