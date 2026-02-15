@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "3210:3210"
+      - "3211:3211"
     environment:
       - CONVEX_CLOUD_ORIGIN=http://convex:3210
       - CONVEX_SITE_ORIGIN=${INSTANCE_PUBLIC_URL:-http://localhost}
