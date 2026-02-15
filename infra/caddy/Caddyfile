@@ -14,20 +14,24 @@
     Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss: ws:;"
   }
 
-  # Convex HTTP actions + auth routes (site proxy port 3211)
-  @convex-site path /api/auth/* /api/resolver/*
-  reverse_proxy @convex-site convex:3211
+  # Convex backend (queries, mutations, WebSocket)
+  @convex path /convex/*
+  handle @convex {
+    uri strip_prefix /convex
+    reverse_proxy convex:3210
+  }
 
-  # Convex WebSocket sync + cloud API (cloud port 3210)
-  @convex-cloud path /api/*
-  reverse_proxy @convex-cloud convex:3210
+  # Convex site (HTTP actions, Better Auth routes)
+  @convex-site path /convex-site/*
+  handle @convex-site {
+    uri strip_prefix /convex-site
+    reverse_proxy convex:3211
+  }
 
-  # Voice server Socket.io
+  # Voice API (Socket.io + mediasoup)
   @socketio path /socket.io*
   reverse_proxy @socketio api:3001
 
-  @ws path /ws*
-  reverse_proxy @ws api:3001
-
+  # Frontend
   reverse_proxy web:80
 }

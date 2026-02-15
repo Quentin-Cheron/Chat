@@ -32,7 +32,8 @@ check_os() {
 }
 
 ask_inputs() {
-  DOMAIN="${DOMAIN:-}"
+  # Domaine : argument positionnel ou variable d'environnement
+  DOMAIN="${1:-${DOMAIN:-}}"
   ADMIN_EMAIL="${ADMIN_EMAIL:-}"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
   CONTROL_PLANE_URL="${CONTROL_PLANE_URL:-}"
@@ -52,58 +53,35 @@ ask_inputs() {
     *) fail "INSTALL_ROLE invalide: $INSTALL_ROLE (instance|resolver|standalone)" ;;
   esac
 
-  if [ "$NON_INTERACTIVE" = "1" ]; then
-    if [ -z "$DOMAIN" ]; then
-      PUBLIC_IP="$(curl -fsS https://api.ipify.org || true)"
-      if [ -n "$PUBLIC_IP" ]; then
-        DOMAIN="${PUBLIC_IP}.nip.io"
-      fi
+  # Résolution automatique du domaine si non fourni
+  if [ -z "$DOMAIN" ]; then
+    PUBLIC_IP="$(curl -fsS https://api.ipify.org 2>/dev/null || true)"
+    if [ -n "$PUBLIC_IP" ]; then
+      DOMAIN="${PUBLIC_IP}.nip.io"
+    else
+      DOMAIN="$(hostname -f 2>/dev/null || echo localhost)"
     fi
+  fi
 
-    if [ -z "$DOMAIN" ]; then
-      HOST_FQDN="$(hostname -f 2>/dev/null || true)"
-      DOMAIN="${HOST_FQDN:-localhost}"
-    fi
-
-    if [ -z "$ADMIN_EMAIL" ]; then
-      ADMIN_EMAIL="admin@${DOMAIN}"
-    fi
-  else
-    read -r -p "Domaine (ex: chat.mondomaine.com): " DOMAIN
-    read -r -p "Email admin: " ADMIN_EMAIL
-    read -r -s -p "Mot de passe admin (laisser vide = auto): " ADMIN_PASSWORD
-    printf "\n"
-
-    if [ "$INSTALL_ROLE" = "instance" ]; then
-      read -r -p "URL control-plane resolver (optionnel, ex: https://resolver.mondomaine.com): " CONTROL_PLANE_URL
-    fi
+  # Mode interactif uniquement si pas de domaine fourni et pas NON_INTERACTIVE
+  if [ "$NON_INTERACTIVE" != "1" ] && [ -z "${1:-}" ] && [ -z "${DOMAIN_SET:-}" ]; then
+    read -r -p "Domaine (ex: chat.mondomaine.com) [$DOMAIN]: " _input
+    [ -n "$_input" ] && DOMAIN="$_input"
   fi
 
   [ -n "$DOMAIN" ] || fail "Domaine requis"
-  [ -n "$ADMIN_EMAIL" ] || fail "Email requis"
 
-  if [ -z "$ADMIN_PASSWORD" ]; then
-    ADMIN_PASSWORD="$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9@#%+=' | head -c 20)"
-  fi
-  if [ -z "$INSTANCE_PUBLIC_URL" ]; then
-    INSTANCE_PUBLIC_URL="https://$DOMAIN"
-  fi
-  if [ -z "$MEDIASOUP_ANNOUNCED_IP" ]; then
-    MEDIASOUP_ANNOUNCED_IP="$DOMAIN"
-  fi
-  if [ -z "$RESOLVER_REGISTER_TOKEN" ]; then
-    RESOLVER_REGISTER_TOKEN="$(openssl rand -hex 24)"
-  fi
+  # Tout le reste est auto-généré
+  ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${DOMAIN}}"
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)}"
+  INSTANCE_PUBLIC_URL="${INSTANCE_PUBLIC_URL:-https://$DOMAIN}"
+  MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-$DOMAIN}"
+  RESOLVER_REGISTER_TOKEN="${RESOLVER_REGISTER_TOKEN:-$(openssl rand -hex 24)}"
+  VITE_RESOLVER_BASE_URL="${VITE_RESOLVER_BASE_URL:-$CONTROL_PLANE_URL}"
+  VITE_PUBLIC_JOIN_BASE_URL="${VITE_PUBLIC_JOIN_BASE_URL:-$CONTROL_PLANE_URL}"
 
   if [ "$INSTALL_ROLE" = "instance" ] && [ -z "$CONTROL_PLANE_URL" ] && [ -n "$DEFAULT_CONTROL_PLANE_URL" ]; then
     CONTROL_PLANE_URL="$DEFAULT_CONTROL_PLANE_URL"
-  fi
-
-  if [ -z "$VITE_RESOLVER_BASE_URL" ]; then
-    VITE_RESOLVER_BASE_URL="$CONTROL_PLANE_URL"
-  fi
-  if [ -z "$VITE_PUBLIC_JOIN_BASE_URL" ]; then
-    VITE_PUBLIC_JOIN_BASE_URL="$CONTROL_PLANE_URL"
   fi
 }
 
@@ -181,61 +159,109 @@ gen_env() {
   log "Génération .env"
   BETTER_AUTH_SECRET="$(openssl rand -hex 32)"
   cat > "$ENV_FILE" <<ENV
+# Application
 APP_NAME=privatechat
 DOMAIN=$DOMAIN
+NODE_ENV=production
+
+# Admin
 ADMIN_EMAIL=$ADMIN_EMAIL
 ADMIN_PASSWORD=$ADMIN_PASSWORD
-INSTANCE_PUBLIC_URL=$INSTANCE_PUBLIC_URL
+
+# Authentification
 BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
+
+# Convex self-hosted
+# URL publique du backend Convex (queries/mutations WebSocket)
+VITE_CONVEX_URL=https://$DOMAIN/convex
+# URL publique du site Convex (HTTP actions, Better Auth)
+VITE_CONVEX_SITE_URL=https://$DOMAIN/convex-site
+CONVEX_SITE_URL=https://$DOMAIN/convex-site
+# URL publique du frontend (pour CORS Better Auth)
+SITE_URL=https://$DOMAIN
+
+# Resolver
 CONTROL_PLANE_URL=$CONTROL_PLANE_URL
+INSTANCE_PUBLIC_URL=$INSTANCE_PUBLIC_URL
 RESOLVER_REGISTER_TOKEN=$RESOLVER_REGISTER_TOKEN
 VITE_RESOLVER_BASE_URL=$VITE_RESOLVER_BASE_URL
 VITE_PUBLIC_JOIN_BASE_URL=$VITE_PUBLIC_JOIN_BASE_URL
+
+# Mediasoup (WebRTC)
 VITE_TURN_URL=$VITE_TURN_URL
 VITE_TURN_USERNAME=$VITE_TURN_USERNAME
 VITE_TURN_PASSWORD=$VITE_TURN_PASSWORD
 MEDIASOUP_ANNOUNCED_IP=$MEDIASOUP_ANNOUNCED_IP
 MEDIASOUP_MIN_PORT=$MEDIASOUP_MIN_PORT
 MEDIASOUP_MAX_PORT=$MEDIASOUP_MAX_PORT
-NODE_ENV=production
-CONVEX_ADMIN_KEY=
 ENV
 }
 
 deploy_stack() {
   log "Déploiement stack docker"
   cd "$APP_DIR"
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile selfhost up -d --build
+}
 
-  # Démarrer Convex en premier pour récupérer la clé admin
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d convex
-  log "Attente démarrage Convex..."
+setup_convex() {
+  log "Configuration Convex"
+  cd "$APP_DIR"
+
+  # Attendre que Convex soit prêt
+  log "Attente du démarrage de Convex..."
   for i in $(seq 1 30); do
-    if curl -fsS "http://localhost:3210/version" >/dev/null 2>&1; then
+    if docker compose exec -T convex wget -qO- http://localhost:3210/version >/dev/null 2>&1; then
       break
     fi
     sleep 2
   done
-  sleep 2
 
-  CONVEX_ADMIN_KEY="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex ./generate_admin_key.sh 2>/dev/null | tr -d '[:space:]')"
+  # Générer la clé admin
+  log "Génération de la clé admin Convex..."
+  CONVEX_ADMIN_KEY="$(docker compose exec -T convex ./generate_admin_key.sh 2>/dev/null | tr -d '[:space:]')" \
+    || fail "Impossible de générer la clé admin Convex"
 
-  if [ -n "$CONVEX_ADMIN_KEY" ]; then
-    grep -v '^CONVEX_ADMIN_KEY=' "$ENV_FILE" > "${ENV_FILE}.tmp"
-    printf 'CONVEX_ADMIN_KEY=%s\n' "${CONVEX_ADMIN_KEY}" >> "${ENV_FILE}.tmp"
-    mv "${ENV_FILE}.tmp" "$ENV_FILE"
-    log "Clé admin Convex récupérée"
-  else
-    fail "Impossible de récupérer la clé admin Convex"
-  fi
+  # Déployer les fonctions
+  log "Déploiement des fonctions Convex..."
+  docker run --rm \
+    --network "$(docker compose ls -q | head -1)_default" \
+    -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
+    -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -v "$APP_DIR/web:/app" \
+    -w /app \
+    node:20-alpine \
+    sh -c "npm install -g pnpm && pnpm install --frozen-lockfile && npx convex deploy --yes" \
+    || fail "Déploiement des fonctions Convex échoué"
 
-  # Déployer tout le reste
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile selfhost up -d --build
+  # Setter les variables d'environnement
+  log "Configuration des variables Convex..."
+  BETTER_AUTH_SECRET="$(grep ^BETTER_AUTH_SECRET "$ENV_FILE" | cut -d= -f2)"
+  CONVEX_SITE_URL_VAL="$(grep ^CONVEX_SITE_URL "$ENV_FILE" | cut -d= -f2)"
+  SITE_URL_VAL="$(grep ^SITE_URL "$ENV_FILE" | cut -d= -f2)"
+  RESOLVER_TOKEN="$(grep ^RESOLVER_REGISTER_TOKEN "$ENV_FILE" | cut -d= -f2)"
+
+  docker run --rm \
+    --network "$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)" \
+    -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
+    -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -v "$APP_DIR/web:/app" \
+    -w /app \
+    node:20-alpine \
+    sh -c "
+      npm install -g pnpm && pnpm install --frozen-lockfile &&
+      npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
+      npx convex env set BETTER_AUTH_URL '$CONVEX_SITE_URL_VAL' &&
+      npx convex env set SITE_URL '$SITE_URL_VAL' &&
+      npx convex env set RESOLVER_REGISTER_TOKEN '$RESOLVER_TOKEN'
+    " || fail "Configuration des variables Convex échouée"
+
+  log "Convex configuré avec succès"
 }
 
 health_check() {
   log "Vérification locale"
-  sleep 6
-  curl -fsS "http://localhost" >/dev/null || fail "Web KO"
+  sleep 4
+  curl -fsS "http://localhost" >/dev/null || fail "Web health KO"
 }
 
 final_output() {
@@ -261,7 +287,7 @@ TXT
 main() {
   check_root
   check_os
-  ask_inputs
+  ask_inputs "${1:-}"
   install_base_packages
   install_docker
   setup_firewall
@@ -269,6 +295,7 @@ main() {
   download_project
   gen_env
   deploy_stack
+  setup_convex
   health_check
   final_output
 }

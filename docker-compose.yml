@@ -7,12 +7,19 @@ services:
       - "3210:3210"
       - "3211:3211"
     environment:
+      # URL interne au réseau Docker (utilisée par le backend Convex lui-même)
       - CONVEX_CLOUD_ORIGIN=http://convex:3210
-      - CONVEX_SITE_ORIGIN=${INSTANCE_PUBLIC_URL:-http://localhost}
-      - SITE_URL=${INSTANCE_PUBLIC_URL:-http://localhost}
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      # URL publique du site Convex (pour les HTTP actions / Better Auth)
+      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_URL:-http://localhost:3211}
+      # Clé admin pour les déploiements self-hosted
+      - CONVEX_ADMIN_KEY=insecure-0000000000000000000000000000000000000000000000000000000000000001
     volumes:
       - convex_data:/convex/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3210/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   caddy:
     image: caddy:2.8
@@ -37,34 +44,25 @@ services:
 
   web:
     build:
-      context: .
-      dockerfile: web/Dockerfile
+      context: ./web
+      dockerfile: Dockerfile
       args:
         - VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
         - VITE_PUBLIC_JOIN_BASE_URL=${VITE_PUBLIC_JOIN_BASE_URL}
         - VITE_TURN_URL=${VITE_TURN_URL}
         - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
         - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
-        - VITE_CONVEX_URL=${INSTANCE_PUBLIC_URL:-http://localhost}
-        - VITE_CONVEX_SITE_URL=${INSTANCE_PUBLIC_URL:-http://localhost}
+        # URL Convex cloud (WebSocket/HTTP pour les queries/mutations)
+        - VITE_CONVEX_URL=${VITE_CONVEX_URL:-http://localhost:3210}
+        # URL Convex site (HTTP actions, Better Auth)
+        - VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL:-http://localhost:3211}
     image: privatechat-web:local
     container_name: privatechat-web
     restart: unless-stopped
     expose:
       - "80"
-
-  convex-deploy:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - .:/app
-    environment:
-      - CONVEX_SELF_HOSTED_URL=http://convex:3210
-      - CONVEX_SELF_HOSTED_ADMIN_KEY=${CONVEX_ADMIN_KEY}
-    command: sh -c "npm install --legacy-peer-deps && npx convex deploy"
     depends_on:
       - convex
-    restart: "no"
 
   api:
     build:
