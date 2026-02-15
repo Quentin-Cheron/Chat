@@ -15,15 +15,14 @@ ENV VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
 ENV VITE_CONVEX_URL=${VITE_CONVEX_URL}
 ENV VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL}
 
-COPY web/package*.json ./
+COPY package*.json ./
 RUN npm install --include=dev
 
-COPY web/ .
-COPY convex/_generated ./convex/_generated
+COPY . .
 
 RUN npm run build
 
 FROM nginx:alpine
-COPY web/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
