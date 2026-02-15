@@ -42,12 +42,26 @@ type UpdateMemberRoleInput = {
 
 type WorkspaceAction =
   | "channel:create"
+  | "channel:delete"
   | "invite:create"
-  | "member:role:update";
+  | "member:role:update"
+  | "member:kick";
 
 const rolePermissions: Record<MemberRole, WorkspaceAction[]> = {
-  OWNER: ["channel:create", "invite:create", "member:role:update"],
-  ADMIN: ["channel:create", "invite:create", "member:role:update"],
+  OWNER: [
+    "channel:create",
+    "channel:delete",
+    "invite:create",
+    "member:role:update",
+    "member:kick",
+  ],
+  ADMIN: [
+    "channel:create",
+    "channel:delete",
+    "invite:create",
+    "member:role:update",
+    "member:kick",
+  ],
   MEMBER: ["channel:create"],
 };
 
@@ -256,6 +270,47 @@ export class WorkspaceService {
         position: count,
       },
     });
+  }
+
+  async deleteChannel(channelId: string, userId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+      select: { workspaceId: true, slug: true },
+    });
+    if (!channel) {
+      throw new NotFoundException("Channel not found.");
+    }
+    const actor = await this.assertMember(channel.workspaceId, userId);
+    this.assertPermission(actor.role, "channel:delete");
+
+    if (channel.slug === "general") {
+      throw new ForbiddenException("The general channel cannot be deleted.");
+    }
+
+    await this.prisma.channel.delete({ where: { id: channelId } });
+  }
+
+  async kickMember(workspaceId: string, actorUserId: string, memberId: string) {
+    const actor = await this.assertMember(workspaceId, actorUserId);
+    this.assertPermission(actor.role, "member:kick");
+
+    const target = await this.prisma.member.findUnique({
+      where: { id: memberId },
+    });
+    if (!target || target.workspaceId !== workspaceId) {
+      throw new NotFoundException("Member not found.");
+    }
+    if (target.role === MemberRole.OWNER) {
+      throw new ForbiddenException("Cannot kick the workspace owner.");
+    }
+    if (target.userId === actor.userId) {
+      throw new ForbiddenException("You cannot kick yourself.");
+    }
+    if (actor.role === MemberRole.ADMIN && target.role === MemberRole.ADMIN) {
+      throw new ForbiddenException("Admins cannot kick other admins.");
+    }
+
+    await this.prisma.member.delete({ where: { id: memberId } });
   }
 
   async listMessages(

@@ -1,13 +1,12 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { authClient } from '@/lib/auth-client';
-import { getProfile, updateProfile } from '@/lib/api';
+import { Input } from "@/components/ui/input";
+import { getProfile, updateProfile } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { User } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
 
-export const Route = createFileRoute('/profile')({
+export const Route = createFileRoute("/profile")({
   component: ProfilePage,
 });
 
@@ -15,16 +14,17 @@ function ProfilePage() {
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const profileQuery = useQuery({
-    queryKey: ['profile'],
+    queryKey: ["profile"],
     queryFn: getProfile,
     enabled: Boolean(session?.user),
   });
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (!sessionPending && !session?.user) {
-      void navigate({ to: '/login', search: { redirect: '/profile' } });
+      void navigate({ to: "/login", search: { redirect: "/profile" } });
     }
   }, [navigate, session?.user, sessionPending]);
 
@@ -38,10 +38,16 @@ function ProfilePage() {
     mutationFn: () => updateProfile({ name }),
     onSuccess: async () => {
       setError(null);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
       await profileQuery.refetch();
     },
     onError: (mutationError) => {
-      setError(mutationError instanceof Error ? mutationError.message : 'Mise a jour impossible.');
+      setError(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Mise à jour impossible.",
+      );
     },
   });
 
@@ -49,44 +55,83 @@ function ProfilePage() {
     event.preventDefault();
     setError(null);
     if (name.trim().length < 2) {
-      setError('Le nom doit contenir au moins 2 caracteres.');
+      setError("Le nom doit contenir au moins 2 caractères.");
       return;
     }
     updateMutation.mutate();
   }
 
   if (sessionPending || profileQuery.isPending) {
-    return <div className="rounded-xl border border-[#2f3136] bg-[#141518] p-6 text-sm text-slate-300">Chargement du profil...</div>;
+    return (
+      <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
+        Chargement du profil...
+      </div>
+    );
   }
 
-  return (
-    <Card className="mx-auto w-full max-w-2xl border-[#2f3136] bg-[#16181c] text-slate-100 shadow-none reveal">
-      <CardHeader>
-        <CardTitle className="text-3xl text-slate-100">Profil utilisateur</CardTitle>
-        <CardDescription className="text-slate-400">Informations de compte pour votre instance privee.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-6">
-        <div className="grid gap-2 rounded-lg border border-[#2f3136] bg-[#101216] p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Email</p>
-          <p className="text-sm font-semibold text-slate-100">{profileQuery.data?.email || '-'}</p>
-        </div>
+  const initials = (profileQuery.data?.name || profileQuery.data?.email || "?")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
+  return (
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-6 flex items-center gap-4 rounded-xl border border-surface-3 bg-surface p-6">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-gradient text-xl font-bold text-white shadow-accent">
+          {initials}
+        </div>
+        <div>
+          <h1 className="text-lg font-bold text-foreground">
+            {profileQuery.data?.name || "—"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {profileQuery.data?.email || "—"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-surface-3 bg-surface p-5">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Email
+        </p>
+        <p className="text-sm font-medium text-foreground">
+          {profileQuery.data?.email || "—"}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground/60">
+          Pour changer l'email, rendez-vous dans Paramètres → Compte.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-surface-3 bg-surface p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <User className="h-4 w-4 text-accent" />
+          <p className="text-sm font-semibold text-foreground">Nom affiché</p>
+        </div>
         <form className="grid gap-4" onSubmit={onSubmit}>
-          <div className="grid gap-2">
-            <label className="text-sm font-semibold text-slate-200" htmlFor="profile-name">Nom affiche</label>
-            <Input
-              id="profile-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="border-[#2f3136] bg-[#101216] text-slate-100 placeholder:text-slate-500"
-            />
-          </div>
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <Button type="submit" disabled={updateMutation.isPending} className="border-[#2f4f73] bg-[#2f4f73] text-white hover:bg-[#274566]">
-            {updateMutation.isPending ? 'Mise a jour...' : 'Enregistrer le profil'}
-          </Button>
+          <Input
+            id="profile-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+            placeholder="Votre nom"
+          />
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {success ? (
+            <p className="text-sm text-success">Profil mis à jour.</p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={updateMutation.isPending}
+            className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {updateMutation.isPending
+              ? "Mise à jour..."
+              : "Enregistrer le profil"}
+          </button>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

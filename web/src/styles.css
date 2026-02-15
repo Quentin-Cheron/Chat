@@ -2,17 +2,37 @@
 @import "tailwindcss";
 
 @theme {
-    --color-background: #f6f2e8;
-    --color-foreground: #14182b;
-    --color-card: #fffdf7;
-    --color-card-foreground: #14182b;
-    --color-primary: #db3e1c;
+    /* ── Surfaces (dark hierarchy) ─────────────────────────── */
+    --color-surface-base: #0c0e14; /* fond global */
+    --color-surface: #0f1117; /* cards / panels */
+    --color-surface-2: #13171f; /* inputs, nested bg */
+    --color-surface-3: #1a1f2e; /* borders, hover léger */
+    --color-surface-4: #1e2536; /* hover actif */
+
+    /* ── Accent violet ─────────────────────────────────────── */
+    --color-accent: #7c5af6; /* primaire */
+    --color-accent-dim: #5b3fd4; /* gradient foncé */
+    --color-accent-soft: #a78bfa; /* texte clair accent */
+
+    /* ── Sémantique app (legacy kept for shadcn compat) ──── */
+    --color-background: #0c0e14;
+    --color-foreground: #e2e8f0;
+    --color-card: #0f1117;
+    --color-card-foreground: #e2e8f0;
+    --color-primary: #7c5af6;
     --color-primary-foreground: #ffffff;
-    --color-muted: #e4e0d6;
-    --color-muted-foreground: #5f6582;
-    --color-accent: #1e6fa8;
-    --color-accent-foreground: #ffffff;
-    --color-border: #1e253a;
+    --color-muted: #1a1f2e;
+    --color-muted-foreground: #64748b;
+    --color-border: #1a1f2e;
+
+    /* ── Feedback ──────────────────────────────────────────── */
+    --color-danger: #f87171; /* rouge texte */
+    --color-danger-bg: #450a0a; /* rouge fond */
+    --color-success: #34d399; /* vert texte */
+    --color-warning: #fbbf24; /* amber */
+    --color-warning-bg: #451a03; /* amber fond */
+
+    /* ── Fonts ─────────────────────────────────────────────── */
     --font-display: "Archivo Black", sans-serif;
     --font-body: "Manrope", sans-serif;
     --font-mono: "JetBrains Mono", monospace;
@@ -20,27 +40,11 @@
 
 @layer base {
     * {
-        border-color: var(--color-border);
+        border-color: var(--color-surface-3);
     }
 
     body {
-        @apply bg-background text-foreground font-body antialiased;
-        background-image:
-            radial-gradient(
-                circle at 8% 8%,
-                rgba(255, 205, 167, 0.8) 0,
-                transparent 28%
-            ),
-            radial-gradient(
-                circle at 90% 12%,
-                rgba(168, 208, 255, 0.7) 0,
-                transparent 26%
-            ),
-            linear-gradient(
-                125deg,
-                rgba(246, 242, 232, 1) 0%,
-                rgba(234, 225, 207, 1) 100%
-            );
+        @apply bg-surface-base text-foreground font-body antialiased;
         min-height: 100vh;
     }
 }
@@ -52,6 +56,24 @@
 
     .reveal {
         animation: reveal 620ms ease both;
+    }
+
+    /* Gradient accent réutilisable */
+    .bg-accent-gradient {
+        background: linear-gradient(
+            135deg,
+            var(--color-accent),
+            var(--color-accent-dim)
+        );
+    }
+
+    .shadow-accent {
+        box-shadow: 0 4px 24px 0
+            color-mix(in srgb, var(--color-accent) 30%, transparent);
+    }
+
+    .focus-accent {
+        @apply focus:border-accent/50 focus:ring-1 focus:ring-accent/30 focus:outline-none;
     }
 }
 

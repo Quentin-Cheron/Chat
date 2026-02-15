@@ -7,12 +7,12 @@ import {
   Post,
   Query,
   Req,
-} from '@nestjs/common';
-import { ChannelType, MemberRole } from '@prisma/client';
-import type { FastifyRequest } from 'fastify';
-import { requireUserSession } from './auth-session';
-import { ChatGateway } from './chat.gateway';
-import { WorkspaceService } from './workspace.service';
+} from "@nestjs/common";
+import { ChannelType, MemberRole } from "@prisma/client";
+import type { FastifyRequest } from "fastify";
+import { requireUserSession } from "./auth-session";
+import { ChatGateway } from "./chat.gateway";
+import { WorkspaceService } from "./workspace.service";
 
 @Controller()
 export class WorkspaceController {
@@ -21,14 +21,17 @@ export class WorkspaceController {
     private readonly chatGateway: ChatGateway,
   ) {}
 
-  @Get('workspaces')
+  @Get("workspaces")
   async listWorkspaces(@Req() req: FastifyRequest) {
     const user = await requireUserSession(req);
     return this.workspaceService.listWorkspacesForUser(user.id);
   }
 
-  @Post('workspaces')
-  async createWorkspace(@Req() req: FastifyRequest, @Body() body: { name: string }) {
+  @Post("workspaces")
+  async createWorkspace(
+    @Req() req: FastifyRequest,
+    @Body() body: { name: string },
+  ) {
     const user = await requireUserSession(req);
     return this.workspaceService.createWorkspace({
       name: body.name,
@@ -36,16 +39,19 @@ export class WorkspaceController {
     });
   }
 
-  @Get('workspaces/:workspaceId/channels')
-  async listChannels(@Req() req: FastifyRequest, @Param('workspaceId') workspaceId: string) {
+  @Get("workspaces/:workspaceId/channels")
+  async listChannels(
+    @Req() req: FastifyRequest,
+    @Param("workspaceId") workspaceId: string,
+  ) {
     const user = await requireUserSession(req);
     return this.workspaceService.listChannels(workspaceId, user.id);
   }
 
-  @Post('workspaces/:workspaceId/channels')
+  @Post("workspaces/:workspaceId/channels")
   async createChannel(
     @Req() req: FastifyRequest,
-    @Param('workspaceId') workspaceId: string,
+    @Param("workspaceId") workspaceId: string,
     @Body() body: { name: string; type?: ChannelType },
   ) {
     const user = await requireUserSession(req);
@@ -57,26 +63,37 @@ export class WorkspaceController {
     });
   }
 
-  @Get('workspaces/:workspaceId/settings')
-  async getWorkspaceSettings(@Req() req: FastifyRequest, @Param('workspaceId') workspaceId: string) {
+  @Get("workspaces/:workspaceId/settings")
+  async getWorkspaceSettings(
+    @Req() req: FastifyRequest,
+    @Param("workspaceId") workspaceId: string,
+  ) {
     const user = await requireUserSession(req);
     return this.workspaceService.getWorkspaceSettings(workspaceId, user.id);
   }
 
-  @Post('workspaces/:workspaceId/settings')
+  @Post("workspaces/:workspaceId/settings")
   async updateWorkspaceSettings(
     @Req() req: FastifyRequest,
-    @Param('workspaceId') workspaceId: string,
-    @Body() body: { allowMemberChannelCreation?: boolean; allowMemberInviteCreation?: boolean },
+    @Param("workspaceId") workspaceId: string,
+    @Body()
+    body: {
+      allowMemberChannelCreation?: boolean;
+      allowMemberInviteCreation?: boolean;
+    },
   ) {
     const user = await requireUserSession(req);
-    return this.workspaceService.updateWorkspaceSettings(workspaceId, user.id, body);
+    return this.workspaceService.updateWorkspaceSettings(
+      workspaceId,
+      user.id,
+      body,
+    );
   }
 
-  @Post('workspaces/:workspaceId/invites')
+  @Post("workspaces/:workspaceId/invites")
   async createInvite(
     @Req() req: FastifyRequest,
-    @Param('workspaceId') workspaceId: string,
+    @Param("workspaceId") workspaceId: string,
     @Body() body: { maxUses?: number; expiresInHours?: number },
   ) {
     const user = await requireUserSession(req);
@@ -88,25 +105,37 @@ export class WorkspaceController {
     });
   }
 
-  @Post('invites/:code/join')
-  async joinWithInvite(@Req() req: FastifyRequest, @Param('code') code: string) {
+  @Post("invites/:code/join")
+  async joinWithInvite(
+    @Req() req: FastifyRequest,
+    @Param("code") code: string,
+  ) {
     const user = await requireUserSession(req);
     return this.workspaceService.joinWorkspaceWithInvite(code, user.id);
   }
 
-  @Get('channels/:channelId/messages')
+  @Get("channels/:channelId/messages")
   async listMessages(
     @Req() req: FastifyRequest,
-    @Param('channelId') channelId: string,
-    @Query('cursor') cursor?: string,
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+    @Param("channelId") channelId: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit", new ParseIntPipe({ optional: true })) limit?: number,
   ) {
     const user = await requireUserSession(req);
-    return this.workspaceService.listMessages(channelId, user.id, limit, cursor);
+    return this.workspaceService.listMessages(
+      channelId,
+      user.id,
+      limit,
+      cursor,
+    );
   }
 
-  @Post('channels/:channelId/messages')
-  async createMessage(@Req() req: FastifyRequest, @Param('channelId') channelId: string, @Body() body: { content: string }) {
+  @Post("channels/:channelId/messages")
+  async createMessage(
+    @Req() req: FastifyRequest,
+    @Param("channelId") channelId: string,
+    @Body() body: { content: string },
+  ) {
     const user = await requireUserSession(req);
     const message = await this.workspaceService.createMessage({
       channelId,
@@ -117,17 +146,41 @@ export class WorkspaceController {
     return message;
   }
 
-  @Get('workspaces/:workspaceId/members')
-  async listMembers(@Req() req: FastifyRequest, @Param('workspaceId') workspaceId: string) {
+  @Get("workspaces/:workspaceId/members")
+  async listMembers(
+    @Req() req: FastifyRequest,
+    @Param("workspaceId") workspaceId: string,
+  ) {
     const user = await requireUserSession(req);
     return this.workspaceService.listMembers(workspaceId, user.id);
   }
 
-  @Post('workspaces/:workspaceId/members/:memberId/role')
+  @Delete("channels/:channelId")
+  async deleteChannel(
+    @Req() req: FastifyRequest,
+    @Param("channelId") channelId: string,
+  ) {
+    const user = await requireUserSession(req);
+    await this.workspaceService.deleteChannel(channelId, user.id);
+    return { ok: true };
+  }
+
+  @Delete("workspaces/:workspaceId/members/:memberId")
+  async kickMember(
+    @Req() req: FastifyRequest,
+    @Param("workspaceId") workspaceId: string,
+    @Param("memberId") memberId: string,
+  ) {
+    const user = await requireUserSession(req);
+    await this.workspaceService.kickMember(workspaceId, user.id, memberId);
+    return { ok: true };
+  }
+
+  @Post("workspaces/:workspaceId/members/:memberId/role")
   async updateMemberRole(
     @Req() req: FastifyRequest,
-    @Param('workspaceId') workspaceId: string,
-    @Param('memberId') memberId: string,
+    @Param("workspaceId") workspaceId: string,
+    @Param("memberId") memberId: string,
     @Body() body: { role: MemberRole },
   ) {
     const user = await requireUserSession(req);

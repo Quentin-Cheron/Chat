@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { authClient } from '@/lib/auth-client';
+import { authClient } from "@/lib/auth-client";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute("/")({
   component: IndexRedirectPage,
 });
 
@@ -13,15 +13,18 @@ function IndexRedirectPage() {
   useEffect(() => {
     if (isPending) return;
     if (session?.user) {
-      void navigate({ to: '/app', replace: true });
+      void navigate({ to: "/app", replace: true });
       return;
     }
-    void navigate({ to: '/login', replace: true });
+    void navigate({ to: "/login", replace: true });
   }, [isPending, navigate, session?.user]);
 
   return (
-    <div className="grid min-h-[40vh] place-items-center rounded-xl border border-[#2f3136] bg-[#141518] p-6 text-sm text-slate-300">
-      Redirection...
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        Redirection...
+      </div>
     </div>
   );
 }

@@ -1,12 +1,11 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
 import { changePassword, getProfile, updateAccount } from "@/lib/api";
 import { readAudioSettings, writeAudioSettings } from "@/lib/audio-settings";
+import { authClient } from "@/lib/auth-client";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Bell, Mic, Shield, User } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -53,11 +52,21 @@ function readNotificationSettings(): NotificationSettings {
 
 function writeNotificationSettings(value: NotificationSettings) {
   try {
-    window.localStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify(value));
+    window.localStorage.setItem(
+      NOTIFICATION_SETTINGS_KEY,
+      JSON.stringify(value),
+    );
   } catch {
     // ignore storage failures
   }
 }
+
+const TABS: { id: SettingsTab; label: string; icon: typeof User }[] = [
+  { id: "account", label: "Compte", icon: User },
+  { id: "security", label: "Sécurité", icon: Shield },
+  { id: "audio", label: "Audio", icon: Mic },
+  { id: "notifications", label: "Notifications", icon: Bell },
+];
 
 function SettingsPage() {
   const navigate = useNavigate();
@@ -89,7 +98,8 @@ function SettingsPage() {
   const [voiceThreshold, setVoiceThreshold] = useState(22);
   const [pushToTalkActive, setPushToTalkActive] = useState(false);
 
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(readNotificationSettings);
+  const [notificationSettings, setNotificationSettings] =
+    useState<NotificationSettings>(readNotificationSettings);
 
   const micStreamRef = useRef<MediaStream | null>(null);
   const monitorAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -137,12 +147,14 @@ function SettingsPage() {
     onSuccess: async () => {
       setSettingsError(null);
       setCurrentPasswordForEmail("");
-      setSettingsSuccess("Compte mis a jour.");
+      setSettingsSuccess("Compte mis à jour.");
       await profileQuery.refetch();
     },
     onError: (error) => {
       setSettingsSuccess(null);
-      setSettingsError(error instanceof Error ? error.message : "Mise a jour du compte impossible.");
+      setSettingsError(
+        error instanceof Error ? error.message : "Mise à jour impossible.",
+      );
     },
   });
 
@@ -153,16 +165,21 @@ function SettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setSettingsSuccess("Mot de passe mis a jour.");
+      setSettingsSuccess("Mot de passe mis à jour.");
     },
     onError: (error) => {
       setSettingsSuccess(null);
-      setPasswordError(error instanceof Error ? error.message : "Changement de mot de passe impossible.");
+      setPasswordError(
+        error instanceof Error ? error.message : "Changement impossible.",
+      );
     },
   });
 
   const emailChanged = useMemo(
-    () => Boolean(profileQuery.data?.email && email && profileQuery.data.email !== email),
+    () =>
+      Boolean(
+        profileQuery.data?.email && email && profileQuery.data.email !== email,
+      ),
     [email, profileQuery.data?.email],
   );
 
@@ -174,7 +191,7 @@ function SettingsPage() {
       setInputDevices(devices.filter((d) => d.kind === "audioinput"));
       setOutputDevices(devices.filter((d) => d.kind === "audiooutput"));
     } catch {
-      setAudioError("Impossible de lister les peripheriques audio.");
+      setAudioError("Impossible de lister les périphériques audio.");
     }
   }
 
@@ -185,7 +202,9 @@ function SettingsPage() {
       await refreshDevices();
       setAudioError(null);
     } catch {
-      setAudioError("Autorisation micro refusee par le systeme ou le navigateur.");
+      setAudioError(
+        "Autorisation micro refusée par le système ou le navigateur.",
+      );
     }
   }
 
@@ -207,7 +226,9 @@ function SettingsPage() {
       monitor.srcObject = stream;
       const sinkId = audioSettings.outputDeviceId;
       if (sinkId && "setSinkId" in monitor) {
-        await (monitor as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(sinkId);
+        await (
+          monitor as HTMLAudioElement & { setSinkId(id: string): Promise<void> }
+        ).setSinkId(sinkId);
       }
       await monitor.play().catch(() => undefined);
       monitorAudioRef.current = monitor;
@@ -235,7 +256,7 @@ function SettingsPage() {
       setPushToTalkActive(false);
       setIsTestingMic(true);
     } catch {
-      setAudioError("Test micro impossible. Verifiez les permissions systeme.");
+      setAudioError("Test micro impossible. Vérifiez les permissions système.");
     }
   }
 
@@ -260,7 +281,10 @@ function SettingsPage() {
     }
   }
 
-  function onAudioSettingsChange(next: { inputDeviceId?: string; outputDeviceId?: string }) {
+  function onAudioSettingsChange(next: {
+    inputDeviceId?: string;
+    outputDeviceId?: string;
+  }) {
     const updated = writeAudioSettings({
       inputDeviceId: next.inputDeviceId ?? audioSettings.inputDeviceId,
       outputDeviceId: next.outputDeviceId ?? audioSettings.outputDeviceId,
@@ -276,7 +300,7 @@ function SettingsPage() {
     setSettingsError(null);
     setSettingsSuccess(null);
     if (name.trim().length < 2) {
-      setSettingsError("Le nom doit contenir au moins 2 caracteres.");
+      setSettingsError("Le nom doit contenir au moins 2 caractères.");
       return;
     }
     if (!email.includes("@")) {
@@ -284,7 +308,9 @@ function SettingsPage() {
       return;
     }
     if (emailChanged && !currentPasswordForEmail) {
-      setSettingsError("Le mot de passe actuel est requis pour changer l'email.");
+      setSettingsError(
+        "Le mot de passe actuel est requis pour changer l'email.",
+      );
       return;
     }
     accountMutation.mutate();
@@ -299,7 +325,9 @@ function SettingsPage() {
       return;
     }
     if (newPassword.length < 10) {
-      setPasswordError("Le nouveau mot de passe doit contenir au moins 10 caracteres.");
+      setPasswordError(
+        "Le nouveau mot de passe doit contenir au moins 10 caractères.",
+      );
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -310,227 +338,339 @@ function SettingsPage() {
   }
 
   if (sessionPending || profileQuery.isPending) {
-    return <div className="rounded-xl border border-[#2f3136] bg-[#141518] p-6 text-sm text-slate-300">Chargement des parametres...</div>;
+    return (
+      <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
+        Chargement des paramètres...
+      </div>
+    );
   }
 
   return (
     <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-      <Card className="h-fit border-[#2f3136] bg-[#16181c] text-slate-100 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-lg">Settings</CardTitle>
-          <CardDescription className="text-slate-400">Compte, securite, audio, notifications.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          <TabButton active={activeTab === "account"} onClick={() => setActiveTab("account")}>Account</TabButton>
-          <TabButton active={activeTab === "security"} onClick={() => setActiveTab("security")}>Security</TabButton>
-          <TabButton active={activeTab === "audio"} onClick={() => setActiveTab("audio")}>Audio</TabButton>
-          <TabButton active={activeTab === "notifications"} onClick={() => setActiveTab("notifications")}>Notifications</TabButton>
-        </CardContent>
-      </Card>
+      {/* Sidebar nav */}
+      <div className="h-fit rounded-xl border border-surface-3 bg-surface p-3">
+        <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Paramètres
+        </p>
+        <div className="grid gap-1">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                activeTab === id
+                  ? "bg-accent/15 text-accent-soft"
+                  : "text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+              }`}
+            >
+              <Icon
+                className={`h-4 w-4 ${activeTab === id ? "text-accent" : "text-muted-foreground"}`}
+              />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <Card className="border-[#2f3136] bg-[#16181c] text-slate-100 shadow-none reveal">
-        <CardHeader>
-          <CardTitle className="text-2xl text-slate-100">
-            {activeTab === "account" ? "Account" : null}
-            {activeTab === "security" ? "Security" : null}
+      {/* Content */}
+      <div className="rounded-xl border border-surface-3 bg-surface p-6">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-foreground">
+            {activeTab === "account" ? "Compte" : null}
+            {activeTab === "security" ? "Sécurité" : null}
             {activeTab === "audio" ? "Audio" : null}
             {activeTab === "notifications" ? "Notifications" : null}
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            {activeTab === "account" ? "Nom utilisateur et email." : null}
-            {activeTab === "security" ? "Mot de passe et securite d'acces." : null}
-            {activeTab === "audio" ? "Entree/sortie audio + test micro." : null}
-            {activeTab === "notifications" ? "Comportement des alertes et sons." : null}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {activeTab === "account" ? (
-            <form className="grid gap-3" onSubmit={onUpdateAccount}>
-              <label className="text-sm text-slate-300">Nom</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100" />
-              <label className="text-sm text-slate-300">Email</label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100" />
-              {emailChanged ? (
-                <>
-                  <label className="text-sm text-slate-300">Mot de passe actuel (requis si email change)</label>
-                  <Input type="password" value={currentPasswordForEmail} onChange={(e) => setCurrentPasswordForEmail(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100" />
-                </>
-              ) : null}
-              {settingsError ? <p className="text-xs text-red-400">{settingsError}</p> : null}
-              {settingsSuccess ? <p className="text-xs text-emerald-400">{settingsSuccess}</p> : null}
-              <Button type="submit" disabled={accountMutation.isPending} className="border-[#2f4f73] bg-[#2f4f73] text-white hover:bg-[#274566]">
-                {accountMutation.isPending ? "Mise a jour..." : "Enregistrer compte"}
-              </Button>
-            </form>
-          ) : null}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {activeTab === "account"
+              ? "Nom d'utilisateur et adresse email."
+              : null}
+            {activeTab === "security"
+              ? "Mot de passe et sécurité d'accès."
+              : null}
+            {activeTab === "audio"
+              ? "Entrée/sortie audio et test micro."
+              : null}
+            {activeTab === "notifications"
+              ? "Comportement des alertes et sons."
+              : null}
+          </p>
+        </div>
 
-          {activeTab === "security" ? (
-            <form className="grid gap-3" onSubmit={onChangePassword}>
-              <label className="text-sm text-slate-300">Mot de passe actuel</label>
-              <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100" />
-              <label className="text-sm text-slate-300">Nouveau mot de passe</label>
-              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100" />
-              <label className="text-sm text-slate-300">Confirmer</label>
-              <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100" />
-              {passwordError ? <p className="text-xs text-red-400">{passwordError}</p> : null}
-              {settingsSuccess ? <p className="text-xs text-emerald-400">{settingsSuccess}</p> : null}
-              <Button type="submit" disabled={passwordMutation.isPending} className="border-[#2f4f73] bg-[#2f4f73] text-white hover:bg-[#274566]">
-                {passwordMutation.isPending ? "Mise a jour..." : "Changer mot de passe"}
-              </Button>
-            </form>
-          ) : null}
-
-          {activeTab === "audio" ? (
-            <div className="grid gap-3">
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" className="border-[#3a3c42] bg-[#141518] text-slate-100 hover:bg-[#35373c]" onClick={() => void requestAudioPermission()}>
-                  Autoriser micro
-                </Button>
-                <Button type="button" variant="outline" className="border-[#3a3c42] bg-[#141518] text-slate-100 hover:bg-[#35373c]" onClick={() => void refreshDevices()}>
-                  Rafraichir peripheriques
-                </Button>
+        {activeTab === "account" ? (
+          <form className="grid max-w-md gap-4" onSubmit={onUpdateAccount}>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Nom
+              </label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Email
+              </label>
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+              />
+            </div>
+            {emailChanged ? (
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Mot de passe actuel
+                </label>
+                <Input
+                  type="password"
+                  value={currentPasswordForEmail}
+                  onChange={(e) => setCurrentPasswordForEmail(e.target.value)}
+                  className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                />
               </div>
-              <label className="text-sm text-slate-300">Micro (entree)</label>
+            ) : null}
+            {settingsError ? (
+              <p className="text-xs text-danger">{settingsError}</p>
+            ) : null}
+            {settingsSuccess ? (
+              <p className="text-xs text-success">{settingsSuccess}</p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={accountMutation.isPending}
+              className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {accountMutation.isPending ? "Mise à jour..." : "Enregistrer"}
+            </button>
+          </form>
+        ) : null}
+
+        {activeTab === "security" ? (
+          <form className="grid max-w-md gap-4" onSubmit={onChangePassword}>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Mot de passe actuel
+              </label>
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Nouveau mot de passe
+              </label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Confirmer
+              </label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+              />
+            </div>
+            {passwordError ? (
+              <p className="text-xs text-danger">{passwordError}</p>
+            ) : null}
+            {settingsSuccess ? (
+              <p className="text-xs text-success">{settingsSuccess}</p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={passwordMutation.isPending}
+              className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {passwordMutation.isPending
+                ? "Mise à jour..."
+                : "Changer le mot de passe"}
+            </button>
+          </form>
+        ) : null}
+
+        {activeTab === "audio" ? (
+          <div className="grid max-w-md gap-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void requestAudioPermission()}
+                className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground transition-all hover:border-accent/30 hover:text-foreground"
+              >
+                Autoriser micro
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshDevices()}
+                className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground transition-all hover:border-accent/30 hover:text-foreground"
+              >
+                Rafraîchir
+              </button>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Micro (entrée)
+              </label>
               <select
                 value={audioSettings.inputDeviceId}
-                onChange={(e) => onAudioSettingsChange({ inputDeviceId: e.target.value })}
-                className="h-10 rounded border border-[#2f3136] bg-[#101216] px-2 text-sm text-slate-100 outline-none"
+                onChange={(e) =>
+                  onAudioSettingsChange({ inputDeviceId: e.target.value })
+                }
+                className="h-10 rounded-lg border border-surface-3 bg-surface-2 px-3 text-sm text-foreground outline-none focus:border-accent/50"
               >
-                <option value="">Defaut systeme</option>
+                <option value="">Défaut système</option>
                 {inputDevices.map((device) => (
                   <option key={device.deviceId} value={device.deviceId}>
                     {device.label || `Micro ${device.deviceId.slice(0, 6)}`}
                   </option>
                 ))}
               </select>
+            </div>
 
-              <label className="text-sm text-slate-300">Sortie (haut-parleur)</label>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Sortie (haut-parleur)
+              </label>
               <select
                 value={audioSettings.outputDeviceId}
-                onChange={(e) => onAudioSettingsChange({ outputDeviceId: e.target.value })}
-                className="h-10 rounded border border-[#2f3136] bg-[#101216] px-2 text-sm text-slate-100 outline-none"
+                onChange={(e) =>
+                  onAudioSettingsChange({ outputDeviceId: e.target.value })
+                }
+                className="h-10 rounded-lg border border-surface-3 bg-surface-2 px-3 text-sm text-foreground outline-none focus:border-accent/50"
               >
-                <option value="">Defaut systeme</option>
+                <option value="">Défaut système</option>
                 {outputDevices.map((device) => (
                   <option key={device.deviceId} value={device.deviceId}>
                     {device.label || `Sortie ${device.deviceId.slice(0, 6)}`}
                   </option>
                 ))}
               </select>
+            </div>
 
-              <label className="text-sm text-slate-300">Seuil de detection voix ({voiceThreshold})</label>
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Seuil de détection voix ({voiceThreshold})
+              </label>
               <input
                 type="range"
                 min={5}
                 max={80}
                 value={voiceThreshold}
                 onChange={(e) => setVoiceThreshold(Number(e.target.value))}
+                className="accent-accent"
               />
-
-              <div className="h-2 overflow-hidden rounded bg-[#101216]">
-                <div className={`h-full transition-all ${isVoiceDetected ? "bg-emerald-500" : "bg-[#2f4f73]"}`} style={{ width: `${micLevel}%` }} />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {!isTestingMic ? (
-                  <Button type="button" onClick={() => void startMicTest()} className="border-[#2f4f73] bg-[#2f4f73] text-white hover:bg-[#274566]">
-                    Tester le micro
-                  </Button>
-                ) : (
-                  <>
-                    <Button type="button" variant="outline" onClick={stopMicTest} className="border-[#3a3c42] bg-[#141518] text-slate-100 hover:bg-[#35373c]">
-                      Arreter le test
-                    </Button>
-                    <Button
-                      type="button"
-                      onMouseDown={() => setPushToTalkActive(true)}
-                      onMouseUp={() => setPushToTalkActive(false)}
-                      onMouseLeave={() => setPushToTalkActive(false)}
-                      onTouchStart={() => setPushToTalkActive(true)}
-                      onTouchEnd={() => setPushToTalkActive(false)}
-                      variant="outline"
-                      className="border-[#3a3c42] bg-[#141518] text-slate-100 hover:bg-[#35373c]"
-                    >
-                      Maintenir pour s'entendre
-                    </Button>
-                  </>
-                )}
-              </div>
-              <p className="text-xs text-slate-400">
-                Astuce: "Maintenir pour s'entendre" simule un mode push-to-talk de test comme sur Discord.
-              </p>
-              {audioError ? <p className="text-xs text-red-400">{audioError}</p> : null}
             </div>
-          ) : null}
 
-          {activeTab === "notifications" ? (
-            <div className="grid gap-3">
-              <label className="flex items-center justify-between gap-3 text-sm text-slate-300">
-                Muet global
-                <input
-                  type="checkbox"
-                  checked={notificationSettings.muteAll}
-                  onChange={(e) =>
-                    setNotificationSettings((prev) => ({ ...prev, muteAll: e.target.checked }))
-                  }
-                />
-              </label>
-              <label className="flex items-center justify-between gap-3 text-sm text-slate-300">
-                Sons messages
-                <input
-                  type="checkbox"
-                  disabled={notificationSettings.muteAll}
-                  checked={notificationSettings.messageSounds}
-                  onChange={(e) =>
-                    setNotificationSettings((prev) => ({ ...prev, messageSounds: e.target.checked }))
-                  }
-                />
-              </label>
-              <label className="flex items-center justify-between gap-3 text-sm text-slate-300">
-                Sons vocal
-                <input
-                  type="checkbox"
-                  disabled={notificationSettings.muteAll}
-                  checked={notificationSettings.voiceSounds}
-                  onChange={(e) =>
-                    setNotificationSettings((prev) => ({ ...prev, voiceSounds: e.target.checked }))
-                  }
-                />
-              </label>
-              <label className="flex items-center justify-between gap-3 text-sm text-slate-300">
-                Notifications desktop
-                <input
-                  type="checkbox"
-                  disabled={notificationSettings.muteAll}
-                  checked={notificationSettings.desktopAlerts}
-                  onChange={(e) =>
-                    setNotificationSettings((prev) => ({ ...prev, desktopAlerts: e.target.checked }))
-                  }
-                />
-              </label>
-              <p className="text-xs text-slate-400">
-                Preferences stockees localement sur cet appareil (MVP).
-              </p>
+            <div className="overflow-hidden rounded-lg bg-surface-2 p-1">
+              <div
+                className={`h-2 rounded-full transition-all duration-75 ${isVoiceDetected ? "bg-success" : "bg-accent/50"}`}
+                style={{ width: `${micLevel}%` }}
+              />
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+
+            <div className="flex flex-wrap gap-2">
+              {!isTestingMic ? (
+                <button
+                  type="button"
+                  onClick={() => void startMicTest()}
+                  className="rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90"
+                >
+                  Tester le micro
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={stopMicTest}
+                    className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground hover:border-danger/40 hover:text-danger"
+                  >
+                    Arrêter le test
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={() => setPushToTalkActive(true)}
+                    onMouseUp={() => setPushToTalkActive(false)}
+                    onMouseLeave={() => setPushToTalkActive(false)}
+                    onTouchStart={() => setPushToTalkActive(true)}
+                    onTouchEnd={() => setPushToTalkActive(false)}
+                    className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground hover:bg-surface-3"
+                  >
+                    Maintenir pour s'entendre
+                  </button>
+                </>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground/70">
+              "Maintenir pour s'entendre" simule un mode push-to-talk de test.
+            </p>
+            {audioError ? (
+              <p className="text-xs text-danger">{audioError}</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeTab === "notifications" ? (
+          <div className="grid max-w-md gap-3">
+            {(
+              [
+                { key: "muteAll", label: "Muet global", disabled: false },
+                {
+                  key: "messageSounds",
+                  label: "Sons messages",
+                  disabled: notificationSettings.muteAll,
+                },
+                {
+                  key: "voiceSounds",
+                  label: "Sons vocal",
+                  disabled: notificationSettings.muteAll,
+                },
+                {
+                  key: "desktopAlerts",
+                  label: "Notifications desktop",
+                  disabled: notificationSettings.muteAll,
+                },
+              ] as const
+            ).map(({ key, label, disabled }) => (
+              <label
+                key={key}
+                className={`flex items-center justify-between rounded-lg border border-surface-3 bg-surface-2 px-4 py-3 ${disabled ? "opacity-50" : "cursor-pointer hover:bg-surface-3"} transition-all`}
+              >
+                <span className="text-sm text-foreground">{label}</span>
+                <input
+                  type="checkbox"
+                  disabled={disabled}
+                  checked={notificationSettings[key]}
+                  onChange={(e) =>
+                    setNotificationSettings((prev) => ({
+                      ...prev,
+                      [key]: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 accent-accent"
+                />
+              </label>
+            ))}
+            <p className="text-xs text-muted-foreground/70">
+              Préférences stockées localement sur cet appareil.
+            </p>
+          </div>
+        ) : null}
+      </div>
     </div>
-  );
-}
-
-function TabButton(props: { active: boolean; onClick: () => void; children: string }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className={`rounded-md border px-3 py-2 text-left text-sm ${
-        props.active
-          ? "border-[#2f4f73] bg-[#2f4f73] text-white"
-          : "border-[#3a3c42] bg-[#141518] text-slate-200 hover:bg-[#35373c]"
-      }`}
-    >
-      {props.children}
-    </button>
   );
 }

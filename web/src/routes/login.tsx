@@ -1,14 +1,13 @@
-import { FormEvent, useState } from 'react';
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { authClient } from '@/lib/auth-client';
-import { getPasswordStatus } from '@/lib/api';
+import { Input } from "@/components/ui/input";
+import { getPasswordStatus } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { MessageSquareMore } from "lucide-react";
+import { FormEvent, useState } from "react";
 
-export const Route = createFileRoute('/login')({
+export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({
-    redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
+    redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
   component: LoginPage,
 });
@@ -16,8 +15,8 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -31,47 +30,103 @@ function LoginPage() {
     });
     setLoading(false);
     if (signInError) {
-      setError(signInError.message || 'Login failed');
+      setError(signInError.message || "Connexion échouée");
       return;
     }
 
     try {
       const status = await getPasswordStatus();
       if (status.mustChangePassword) {
-        await navigate({ to: '/security/change-password' });
+        await navigate({ to: "/security/change-password" });
         return;
       }
     } catch {
-      // If status check fails, keep normal flow.
+      // Si le check échoue, on continue normalement
     }
 
-    await navigate({ to: search.redirect || '/app' });
+    await navigate({ to: search.redirect || "/app" });
   }
 
   return (
-    <Card className="mx-auto w-full max-w-lg border-[#2f3136] bg-[#16181c] text-slate-100 shadow-none reveal">
-      <CardHeader>
-        <CardTitle className="text-3xl text-slate-100">Connexion</CardTitle>
-        <CardDescription className="text-slate-400">Accedez a votre espace de collaboration prive.</CardDescription>
-        <p className="text-xs text-slate-500">Gardez vos donnees chez vous, operees via notre service.</p>
-      </CardHeader>
-      <CardContent>
-        <form className="grid gap-4" onSubmit={onSubmit}>
-          <div className="grid gap-2">
-            <label className="text-sm font-semibold text-slate-200" htmlFor="email">Email</label>
-            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100 placeholder:text-slate-500" />
+    <div className="flex min-h-[80vh] items-center justify-center">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-gradient shadow-accent">
+            <MessageSquareMore className="h-7 w-7 text-white" />
           </div>
-          <div className="grid gap-2">
-            <label className="text-sm font-semibold text-slate-200" htmlFor="password">Password</label>
-            <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="border-[#2f3136] bg-[#101216] text-slate-100 placeholder:text-slate-500" />
-          </div>
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <Button type="submit" disabled={loading} className="border-[#2f4f73] bg-[#2f4f73] text-white hover:bg-[#274566]">{loading ? 'Connexion...' : 'Se connecter'}</Button>
-          <p className="text-sm text-slate-400">
-            Pas de compte ? <Link to="/register" className="font-semibold text-accent underline">Creer un compte</Link>
+          <h1 className="text-2xl font-bold text-foreground">Connexion</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Accédez à votre espace de collaboration privé
           </p>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+
+        <div className="rounded-2xl border border-surface-3 bg-surface p-8 shadow-xl shadow-black/40">
+          <form className="grid gap-5" onSubmit={onSubmit}>
+            <div className="grid gap-2">
+              <label
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                htmlFor="email"
+              >
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                htmlFor="password"
+              >
+                Mot de passe
+              </label>
+              <Input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+                placeholder="••••••••••"
+              />
+            </div>
+
+            {error ? (
+              <div className="rounded-lg border border-danger/20 bg-danger-bg/30 px-3 py-2.5 text-sm text-danger">
+                {error}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-1 w-full rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {loading ? "Connexion..." : "Se connecter"}
+            </button>
+
+            <p className="text-center text-sm text-muted-foreground">
+              Pas de compte ?{" "}
+              <Link
+                to="/register"
+                className="font-semibold text-accent transition-colors hover:text-accent-soft"
+              >
+                Créer un compte
+              </Link>
+            </p>
+          </form>
+        </div>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground/50">
+          Vos données restent sur votre serveur
+        </p>
+      </div>
+    </div>
   );
 }

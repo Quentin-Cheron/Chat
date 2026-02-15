@@ -120,8 +120,14 @@ export type ResolvedInvitePayload = {
   expiresAt: string | null;
 };
 
-const resolverBaseUrl = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_RESOLVER_BASE_URL || '').replace(/\/$/, '');
-const publicJoinBaseUrl = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_PUBLIC_JOIN_BASE_URL || '').replace(/\/$/, '');
+const resolverBaseUrl = (
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    ?.VITE_RESOLVER_BASE_URL || ""
+).replace(/\/$/, "");
+const publicJoinBaseUrl = (
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    ?.VITE_PUBLIC_JOIN_BASE_URL || ""
+).replace(/\/$/, "");
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(path, {
@@ -210,7 +216,10 @@ export function getPasswordStatus(): Promise<PasswordStatusPayload> {
   return request<PasswordStatusPayload>("/api/auth/password-status");
 }
 
-export async function changePassword(params: { currentPassword: string; newPassword: string }): Promise<void> {
+export async function changePassword(params: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
   const response = await fetch("/api/auth/change-password", {
     method: "POST",
     headers: {
@@ -230,7 +239,10 @@ export function getProfile(): Promise<UserProfilePayload> {
   return request<UserProfilePayload>("/api/auth/profile");
 }
 
-export async function updateProfile(params: { name: string; image?: string | null }): Promise<UserProfilePayload> {
+export async function updateProfile(params: {
+  name: string;
+  image?: string | null;
+}): Promise<UserProfilePayload> {
   const response = await fetch("/api/auth/profile", {
     method: "POST",
     headers: {
@@ -289,13 +301,20 @@ export function listChannels(workspaceId: string): Promise<ChannelPayload[]> {
   return request<ChannelPayload[]>(`/api/workspaces/${workspaceId}/channels`);
 }
 
-export function getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettingsPayload> {
-  return request<WorkspaceSettingsPayload>(`/api/workspaces/${workspaceId}/settings`);
+export function getWorkspaceSettings(
+  workspaceId: string,
+): Promise<WorkspaceSettingsPayload> {
+  return request<WorkspaceSettingsPayload>(
+    `/api/workspaces/${workspaceId}/settings`,
+  );
 }
 
 export async function updateWorkspaceSettings(
   workspaceId: string,
-  params: { allowMemberChannelCreation?: boolean; allowMemberInviteCreation?: boolean },
+  params: {
+    allowMemberChannelCreation?: boolean;
+    allowMemberInviteCreation?: boolean;
+  },
 ): Promise<WorkspaceSettingsPayload> {
   const response = await fetch(`/api/workspaces/${workspaceId}/settings`, {
     method: "POST",
@@ -312,7 +331,11 @@ export async function updateWorkspaceSettings(
   return response.json() as Promise<WorkspaceSettingsPayload>;
 }
 
-export async function createChannel(workspaceId: string, name: string, type: "TEXT" | "VOICE" = "TEXT"): Promise<void> {
+export async function createChannel(
+  workspaceId: string,
+  name: string,
+  type: "TEXT" | "VOICE" = "TEXT",
+): Promise<void> {
   const response = await fetch(`/api/workspaces/${workspaceId}/channels`, {
     method: "POST",
     credentials: "include",
@@ -327,26 +350,39 @@ export async function createChannel(workspaceId: string, name: string, type: "TE
   }
 }
 
-export function listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberPayload[]> {
-  return request<WorkspaceMemberPayload[]>(`/api/workspaces/${workspaceId}/members`);
+export function listWorkspaceMembers(
+  workspaceId: string,
+): Promise<WorkspaceMemberPayload[]> {
+  return request<WorkspaceMemberPayload[]>(
+    `/api/workspaces/${workspaceId}/members`,
+  );
 }
 
-export async function updateWorkspaceMemberRole(workspaceId: string, memberId: string, role: "ADMIN" | "MEMBER"): Promise<void> {
-  const response = await fetch(`/api/workspaces/${workspaceId}/members/${memberId}/role`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "content-type": "application/json",
+export async function updateWorkspaceMemberRole(
+  workspaceId: string,
+  memberId: string,
+  role: "ADMIN" | "MEMBER",
+): Promise<void> {
+  const response = await fetch(
+    `/api/workspaces/${workspaceId}/members/${memberId}/role`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ role }),
     },
-    body: JSON.stringify({ role }),
-  });
+  );
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `HTTP ${response.status}`);
   }
 }
 
-export async function createInvite(workspaceId: string): Promise<{ code: string }> {
+export async function createInvite(
+  workspaceId: string,
+): Promise<{ code: string }> {
   const response = await fetch(`/api/workspaces/${workspaceId}/invites`, {
     method: "POST",
     credentials: "include",
@@ -374,10 +410,15 @@ export async function joinInvite(code: string): Promise<void> {
 }
 
 export function listMessages(channelId: string): Promise<MessagePayload[]> {
-  return request<MessagePayload[]>(`/api/channels/${channelId}/messages?limit=30`);
+  return request<MessagePayload[]>(
+    `/api/channels/${channelId}/messages?limit=30`,
+  );
 }
 
-export async function sendMessage(channelId: string, content: string): Promise<void> {
+export async function sendMessage(
+  channelId: string,
+  content: string,
+): Promise<void> {
   const response = await fetch(`/api/channels/${channelId}/messages`, {
     method: "POST",
     credentials: "include",
@@ -392,8 +433,40 @@ export async function sendMessage(channelId: string, content: string): Promise<v
   }
 }
 
-export function resolveInviteCode(code: string): Promise<ResolvedInvitePayload> {
-  return resolverRequest<ResolvedInvitePayload>(`/api/resolver/resolve/${encodeURIComponent(code)}`);
+export async function deleteChannel(channelId: string): Promise<void> {
+  const response = await fetch(`/api/channels/${channelId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+}
+
+export async function kickMember(
+  workspaceId: string,
+  memberId: string,
+): Promise<void> {
+  const response = await fetch(
+    `/api/workspaces/${workspaceId}/members/${memberId}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+}
+
+export function resolveInviteCode(
+  code: string,
+): Promise<ResolvedInvitePayload> {
+  return resolverRequest<ResolvedInvitePayload>(
+    `/api/resolver/resolve/${encodeURIComponent(code)}`,
+  );
 }
 
 export function getShareInviteLink(code: string): string {
