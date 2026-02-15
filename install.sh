@@ -208,11 +208,12 @@ deploy_stack() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d convex
   log "Attente démarrage Convex..."
   for i in $(seq 1 30); do
-    if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'test -f /convex/data/credentials/instance_secret' 2>/dev/null; then
+    if curl -fsS "http://localhost:3210/version" >/dev/null 2>&1; then
       break
     fi
     sleep 2
   done
+  sleep 2
 
   INSTANCE_NAME="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'cat /convex/data/credentials/instance_name' 2>/dev/null | tr -d '[:space:]')"
   INSTANCE_SECRET="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'cat /convex/data/credentials/instance_secret' 2>/dev/null | tr -d '[:space:]')"
