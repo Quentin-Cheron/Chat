@@ -215,11 +215,9 @@ deploy_stack() {
   done
   sleep 2
 
-  INSTANCE_NAME="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'cat /convex/data/credentials/instance_name' 2>/dev/null | tr -d '[:space:]')"
-  INSTANCE_SECRET="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex sh -c 'cat /convex/data/credentials/instance_secret' 2>/dev/null | tr -d '[:space:]')"
+  CONVEX_ADMIN_KEY="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T convex ./generate_admin_key.sh 2>/dev/null | tr -d '[:space:]')"
 
-  if [ -n "$INSTANCE_NAME" ] && [ -n "$INSTANCE_SECRET" ]; then
-    CONVEX_ADMIN_KEY="${INSTANCE_NAME}|${INSTANCE_SECRET}"
+  if [ -n "$CONVEX_ADMIN_KEY" ]; then
     grep -v '^CONVEX_ADMIN_KEY=' "$ENV_FILE" > "${ENV_FILE}.tmp"
     printf 'CONVEX_ADMIN_KEY=%s\n' "${CONVEX_ADMIN_KEY}" >> "${ENV_FILE}.tmp"
     mv "${ENV_FILE}.tmp" "$ENV_FILE"
