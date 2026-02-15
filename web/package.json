@@ -11,7 +11,7 @@
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.1",
     "convex": "^1.17.4",
-    "@convex-dev/better-auth": "^0.0.18",
+    "@convex-dev/better-auth": "^0.10.10",
     "@tanstack/react-query": "^5.66.8",
     "@tanstack/react-router": "^1.111.10",
     "better-auth": "^1.3.7",
