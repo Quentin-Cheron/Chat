@@ -227,7 +227,6 @@ setup_convex() {
     --network "$(docker compose ls -q | head -1)_default" \
     -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
     -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
-    -e CONVEX_DEPLOYMENT="" \
     -v "$APP_DIR/web:/app" \
     -w /app \
     node:20-alpine \
@@ -245,7 +244,6 @@ setup_convex() {
     --network "$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)" \
     -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
     -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
-    -e CONVEX_DEPLOYMENT="" \
     -v "$APP_DIR/web:/app" \
     -w /app \
     node:20-alpine \
