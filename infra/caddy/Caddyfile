@@ -14,14 +14,20 @@
     Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss: ws:;"
   }
 
-  # Convex backend (queries, mutations, WebSocket)
+  # Better Auth HTTP actions (port 3211 site)
+  @auth path /api/auth/* /api/auth
+  handle @auth {
+    reverse_proxy convex:3211
+  }
+
+  # Convex backend (queries, mutations, WebSocket — port 3210)
   @convex path /convex/*
   handle @convex {
     uri strip_prefix /convex
     reverse_proxy convex:3210
   }
 
-  # Convex site (HTTP actions, Better Auth routes)
+  # Convex site HTTP actions génériques (port 3211)
   @convex-site path /convex-site/*
   handle @convex-site {
     uri strip_prefix /convex-site
