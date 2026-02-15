@@ -51,6 +51,19 @@ services:
     expose:
       - "80"
 
+  convex-deploy:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - CONVEX_SELF_HOSTED_URL=http://convex:3210
+      - CONVEX_SELF_HOSTED_ADMIN_KEY=${CONVEX_ADMIN_KEY}
+    command: sh -c "npm install && npx convex deploy --url http://convex:3210 --admin-key $$CONVEX_SELF_HOSTED_ADMIN_KEY"
+    depends_on:
+      - convex
+    restart: "no"
+
   api:
     build:
       context: ./api
