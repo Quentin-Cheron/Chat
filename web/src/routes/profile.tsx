@@ -50,7 +50,7 @@ function ProfilePage() {
 
   if (sessionPending) {
     return (
-      <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
+      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
         Chargement du profil...
       </div>
     );
@@ -66,8 +66,8 @@ function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-6 flex items-center gap-4 rounded-xl border border-surface-3 bg-surface p-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-gradient text-xl font-bold text-white shadow-accent">
+      <div className="mb-6 flex items-center gap-4 rounded-xl border border-border bg-card p-6">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-xl font-bold text-white shadow-sm">
           {initials}
         </div>
         <div>
@@ -78,7 +78,7 @@ function ProfilePage() {
         </div>
       </div>
 
-      <div className="mb-4 rounded-xl border border-surface-3 bg-surface p-5">
+      <div className="mb-4 rounded-xl border border-border bg-card p-5">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Email
         </p>
@@ -90,9 +90,9 @@ function ProfilePage() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-surface-3 bg-surface p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
-          <User className="h-4 w-4 text-accent" />
+          <User className="h-4 w-4 text-primary" />
           <p className="text-sm font-semibold text-foreground">Nom affiché</p>
         </div>
         <form className="grid gap-4" onSubmit={onSubmit}>
@@ -100,17 +100,17 @@ function ProfilePage() {
             id="profile-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+            className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none"
             placeholder="Votre nom"
           />
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
           {success ? (
-            <p className="text-sm text-success">Profil mis à jour.</p>
+            <p className="text-sm text-green-500">Profil mis à jour.</p>
           ) : null}
           <button
             type="submit"
             disabled={saving}
-            className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {saving ? "Mise à jour..." : "Enregistrer le profil"}
           </button>

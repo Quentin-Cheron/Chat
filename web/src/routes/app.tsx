@@ -1,24 +1,18 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { useAppStore } from "@/store/app-store";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
-import { Menu, PanelLeftClose } from "lucide-react";
+import { Menu, MessageSquareMore, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
-// Import new components
 import { ChannelList } from "@/components/ChannelList";
-import { MemberPanel } from "@/components/MemberPanel";
 import { MessagePanel } from "@/components/MessagePanel";
-import { SettingsPanel } from "@/components/SettingsPanel";
-import { VoicePanel } from "@/components/VoicePanel";
+import { RightSidebar } from "@/components/RightSidebar";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 
-// Import new hooks
 import { useFormHandlers } from "@/hooks/useFormHandlers";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 
@@ -45,419 +39,247 @@ function AppPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
 
-  // App store selectors
-  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
-  const selectedChannelId = useAppStore((s) => s.selectedChannelId);
+  // messageDraft reste dans le store (état purement local, pas dans l'URL)
   const messageDraft = useAppStore((s) => s.messageDraft);
-  const setSelectedWorkspaceId = useAppStore((s) => s.setSelectedWorkspaceId);
-  const setSelectedChannelId = useAppStore((s) => s.setSelectedChannelId);
   const setMessageDraft = useAppStore((s) => s.setMessageDraft);
-  const resetChannelSelection = useAppStore((s) => s.resetChannelSelection);
 
-  // Local UI state
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [selectedDmUserId, setSelectedDmUserId] = useState("");
-  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
-    try {
-      return (
-        window.localStorage.getItem("privatechat_onboarding_dismissed") === "1"
-      );
-    } catch {
-      return false;
-    }
-  });
+
+  // ── IDs depuis l'URL (source de vérité) ─────────────────────────────────
+  const selectedWorkspaceId = search.workspace ?? "";
+  const selectedChannelId = search.channel ?? "";
 
   const socketRef = useRef<Socket | null>(null);
+  const formHandlers = useFormHandlers({ selectedWorkspaceId, selectedChannelId });
 
-  // Use custom hooks
-  const formHandlers = useFormHandlers();
+  // ── Helpers de navigation ────────────────────────────────────────────────
+  function selectWorkspace(id: string) {
+    void navigate({ to: "/app", replace: true, search: { workspace: id } });
+  }
+
+  function selectChannel(id: string) {
+    void navigate({ to: "/app", replace: true, search: (prev) => ({ ...prev, channel: id, voice: undefined }) });
+  }
+
   const voiceChannel = useVoiceChannel(socketRef, session);
 
-  // ── Convex live queries ──────────────────────────────────────────────────
-  const passwordStatus = useQuery(
-    api.users.getPasswordStatus,
-    session?.user ? {} : "skip",
-  );
-  const workspaces =
-    useQuery(api.workspaces.list, session?.user ? {} : "skip") ?? [];
-
-  const channels =
-    useQuery(
-      api.channels.list,
-      selectedWorkspaceId
-        ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> }
-        : "skip",
-    ) ?? [];
-
-  const messages =
-    useQuery(
-      api.messages.list,
-      selectedChannelId
-        ? { channelId: selectedChannelId as Id<"channels"> }
-        : "skip",
-    ) ?? [];
-
-  const members =
-    useQuery(
-      api.members.list,
-      selectedWorkspaceId
-        ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> }
-        : "skip",
-    ) ?? [];
-
+  // ── Convex queries ──────────────────────────────────────────────────────
+  const passwordStatus = useQuery(api.users.getPasswordStatus, session?.user ? {} : "skip");
+  const workspacesQuery = useQuery(api.workspaces.list, session?.user ? {} : "skip");
+  const workspaces = workspacesQuery ?? [];
+  const channels = useQuery(
+    api.channels.list,
+    session?.user && selectedWorkspaceId ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> } : "skip",
+  ) ?? [];
+  const messages = useQuery(
+    api.messages.list,
+    session?.user && selectedChannelId ? { channelId: selectedChannelId as Id<"channels"> } : "skip",
+  ) ?? [];
+  const members = useQuery(
+    api.members.list,
+    session?.user && selectedWorkspaceId ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> } : "skip",
+  ) ?? [];
   const workspaceSettings = useQuery(
     api.workspaces.getSettings,
-    selectedWorkspaceId
-      ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> }
-      : "skip",
+    session?.user && selectedWorkspaceId ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> } : "skip",
   );
 
-  // ── Derived state ────────────────────────────────────────────────────────
+  // ── Derived state ───────────────────────────────────────────────────────
   const selectedWorkspaceMembership = useMemo(
     () => workspaces.find((w) => w.workspaceId === selectedWorkspaceId) ?? null,
     [workspaces, selectedWorkspaceId],
   );
-
   const selectedChannel = useMemo(
     () => channels.find((c) => c._id === selectedChannelId) ?? null,
     [channels, selectedChannelId],
   );
-
   const dmMembers = useMemo(
     () => members.filter((m) => m.userId !== session?.user?.id),
     [members, session?.user?.id],
   );
-
   const selectedDmMember = useMemo(
     () => dmMembers.find((m) => m.userId === selectedDmUserId) ?? null,
     [dmMembers, selectedDmUserId],
   );
-
   const canModerateRoles =
     selectedWorkspaceMembership?.role === "OWNER" ||
     selectedWorkspaceMembership?.role === "ADMIN";
 
-  // ── mustChangePassword redirect ─────────────────────────────────────────
+  // ── Auto-select workspace si absent de l'URL ─────────────────────────────
+  useEffect(() => {
+    if (!workspaces.length) return;
+    if (selectedWorkspaceId && workspaces.some((w) => w.workspaceId === selectedWorkspaceId)) return;
+    // Pas de workspace valide dans l'URL → prendre le premier
+    void navigate({ to: "/app", replace: true, search: { workspace: workspaces[0].workspaceId } });
+  }, [workspaces, selectedWorkspaceId, navigate]);
+
+  // ── Auto-select channel si absent de l'URL ───────────────────────────────
+  useEffect(() => {
+    if (!channels.length) return;
+    if (selectedChannelId && channels.some((c) => c._id === selectedChannelId)) return;
+    // Pas de channel valide dans l'URL → prendre le premier
+    void navigate({ to: "/app", replace: true, search: (prev) => ({ ...prev, channel: channels[0]._id, voice: undefined }) });
+  }, [channels, selectedChannelId, navigate]);
+
+  // ── mustChangePassword redirect ──────────────────────────────────────────
   useEffect(() => {
     if (session?.user && passwordStatus?.mustChangePassword) {
       void navigate({ to: "/security/change-password" });
     }
   }, [navigate, session?.user, passwordStatus?.mustChangePassword]);
 
-  // ── Workspace selection sync ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!workspaces.length) {
-      setSelectedWorkspaceId("");
-      resetChannelSelection();
-      return;
-    }
-    const fromSearch =
-      search.workspace &&
-      workspaces.some((w) => w.workspaceId === search.workspace)
-        ? search.workspace
-        : "";
-    if (fromSearch && fromSearch !== selectedWorkspaceId) {
-      setSelectedWorkspaceId(fromSearch);
-      return;
-    }
-    if (
-      !selectedWorkspaceId ||
-      !workspaces.some((w) => w.workspaceId === selectedWorkspaceId)
-    ) {
-      setSelectedWorkspaceId(workspaces[0].workspaceId);
-    }
-  }, [
-    workspaces,
-    selectedWorkspaceId,
-    setSelectedWorkspaceId,
-    resetChannelSelection,
-    search.workspace,
-  ]);
-
-  // ── Channel selection sync ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!channels.length) {
-      setSelectedChannelId("");
-      return;
-    }
-    const fromSearch =
-      search.channel && channels.some((c) => c._id === search.channel)
-        ? search.channel
-        : "";
-    if (fromSearch && fromSearch !== selectedChannelId) {
-      setSelectedDmUserId("");
-      setSelectedChannelId(fromSearch);
-      return;
-    }
-    if (
-      !selectedDmUserId &&
-      (!selectedChannelId || !channels.some((c) => c._id === selectedChannelId))
-    ) {
-      setSelectedChannelId(channels[0]._id);
-    }
-  }, [channels, selectedDmUserId, setSelectedChannelId, search.channel]);
-
-  // ── Leave voice if channel deleted ──────────────────────────────────────
+  // ── Leave voice if channel deleted ───────────────────────────────────────
   useEffect(() => {
     if (!voiceChannel.voiceChannelId || !channels.length) return;
-    if (!channels.some((c) => c._id === voiceChannel.voiceChannelId)) {
-      void voiceChannel.leaveVoiceChannel();
-    }
+    if (!channels.some((c) => c._id === voiceChannel.voiceChannelId)) void voiceChannel.leaveVoiceChannel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channels]);
 
-  // ── URL sync ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!session?.user) return;
-    const nextWorkspace = selectedWorkspaceId || undefined;
-    const nextChannel = selectedChannelId || undefined;
-    const nextVoice = voiceChannel.voiceChannelId || undefined;
-    if (
-      search.workspace === nextWorkspace &&
-      search.channel === nextChannel &&
-      search.voice === nextVoice
-    )
-      return;
-    void navigate({
-      to: "/app",
-      replace: true,
-      search: (prev) => ({
-        ...prev,
-        workspace: nextWorkspace,
-        channel: nextChannel,
-        voice: nextVoice,
-      }),
-    });
-  }, [
-    navigate,
-    search.channel,
-    search.voice,
-    search.workspace,
-    selectedChannelId,
-    selectedWorkspaceId,
-    session?.user,
-    voiceChannel.voiceChannelId,
-  ]);
-
-  // ── Onboarding persistence ───────────────────────────────────────────────
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        "privatechat_onboarding_dismissed",
-        onboardingDismissed ? "1" : "0",
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [onboardingDismissed]);
-
-  // ── Socket.io — voice only ───────────────────────────────────────────────
+  // ── Socket.io ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session?.user || socketRef.current) return;
-
-    const socket: Socket = io("/ws", {
-      withCredentials: true,
-      transports: ["websocket"],
-      path: "/socket.io",
-    });
+    const socket: Socket = io("/ws", { withCredentials: true, transports: ["websocket"], path: "/socket.io" });
     socketRef.current = socket;
-
-    // Voice presence listener
-    socket.on(
-      "voice-presence",
-      (payload: {
-        channelId: string;
-        participants: Array<{
-          peerId: string;
-          name?: string;
-          email?: string;
-          speaking?: boolean;
-        }>;
-      }) => {
-        if (!payload?.channelId || !Array.isArray(payload.participants)) return;
-        if (payload.channelId !== voiceChannel.voiceChannelId) return;
-        const me = socket.id;
-        const peers = payload.participants
-          .map((p) => p.peerId)
-          .filter((id) => id && id !== me);
-        const roster: Record<
-          string,
-          { name: string; email: string; speaking: boolean }
-        > = {};
-        payload.participants.forEach((p) => {
-          if (!p.peerId || p.peerId === me) return;
-          roster[p.peerId] = {
-            name: p.name || "User",
-            email: p.email || "",
-            speaking: Boolean(p.speaking),
-          };
-        });
-        // Update voice roster (this would be handled by the voice hook in a full refactor)
-        console.log("Voice presence update received", roster);
-      },
-    );
-
-    socket.on(
-      "voice-new-producer",
-      async (payload: {
-        channelId: string;
-        producerId: string;
-        peerId: string;
-      }) => {
-        if (
-          !payload?.channelId ||
-          payload.channelId !== voiceChannel.voiceChannelId
-        )
-          return;
-        // Handle new producer (managed by voice hook)
-        console.log("New producer", payload);
-      },
-    );
-
-    socket.on("voice-peer-left", (payload: { peerId: string }) => {
-      // Handle peer left
-      console.log("Peer left", payload.peerId);
+    socket.on("voice-presence", (payload: { channelId: string; participants: Array<{ peerId: string; name?: string; email?: string; speaking?: boolean }> }) => {
+      if (!payload?.channelId || !Array.isArray(payload.participants)) return;
     });
-
-    socket.on(
-      "voice-speaking",
-      (payload: { peerId: string; speaking: boolean }) => {
-        // Handle speaking state
-        console.log("Speaking state", payload);
-      },
-    );
-
-    return () => {
-      socket.off("voice-new-producer");
-      socket.off("voice-presence");
-      socket.disconnect();
-      socketRef.current = null;
-    };
+    socket.on("voice-new-producer", async (payload: { channelId: string; producerId: string; peerId: string }) => {
+      if (!payload?.channelId || payload.channelId !== voiceChannel.voiceChannelId) return;
+    });
+    socket.on("voice-peer-left", (_payload: { peerId: string }) => {});
+    socket.on("voice-speaking", (_payload: { peerId: string; speaking: boolean }) => {});
+    return () => { socket.off("voice-new-producer"); socket.off("voice-presence"); socket.disconnect(); socketRef.current = null; };
   }, [session?.user, voiceChannel.voiceChannelId]);
 
   useEffect(() => {
     if (!socketRef.current || !selectedChannelId) return;
     socketRef.current.emit("join-channel", { channelId: selectedChannelId });
-    return () => {
-      socketRef.current?.emit("leave-channel", {
-        channelId: selectedChannelId,
-      });
-    };
+    return () => { socketRef.current?.emit("leave-channel", { channelId: selectedChannelId }); };
   }, [selectedChannelId]);
 
   // ── Auto-join voice from URL ─────────────────────────────────────────────
   useEffect(() => {
     if (!session?.user || !search.voice || !socketRef.current) return;
-    if (voiceChannel.voiceChannelId === search.voice || !channels.length)
-      return;
-    const target = channels.find(
-      (c) => c._id === search.voice && c.type === "VOICE",
-    );
+    if (voiceChannel.voiceChannelId === search.voice || !channels.length) return;
+    const target = channels.find((c) => c._id === search.voice && c.type === "VOICE");
     if (!target) return;
     void voiceChannel.joinVoiceChannel(target._id);
   }, [channels, search.voice, session?.user, voiceChannel]);
 
-  // ── Audio devices setup ──────────────────────────────────────────────────
+  // ── Audio devices ────────────────────────────────────────────────────────
   useEffect(() => {
     void voiceChannel.refreshDevices();
     if (!navigator.mediaDevices) return;
-    const onDeviceChange = () => {
-      void voiceChannel.refreshDevices();
-      // Handle device change if in voice channel
-    };
+    const onDeviceChange = () => { void voiceChannel.refreshDevices(); };
     navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
-    return () =>
-      navigator.mediaDevices.removeEventListener(
-        "devicechange",
-        onDeviceChange,
-      );
+    return () => navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
   }, [voiceChannel]);
 
-  // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
-    return () => {
-      void voiceChannel.leaveVoiceChannel();
-    };
+    return () => { void voiceChannel.leaveVoiceChannel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Early returns ────────────────────────────────────────────────────────
+  // ── Early returns ───────────────────────────────────────────────────────
   if (isPending) {
     return (
-      <div className="rounded-2xl border border-surface-3 bg-surface-3 p-6 text-sm text-muted-foreground">
-        Chargement de la session...
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Loading...
+        </div>
       </div>
     );
   }
 
   if (!session?.user) {
     return (
-      <div className="rounded-xl border border-surface-3 bg-surface-3 p-8 text-foreground">
-        <h2 className="text-2xl font-semibold">Connexion requise</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Client prive d'entreprise. Le serveur est deja deployee sur votre
-          infrastructure.
-        </p>
-        <Link
-          to="/login"
-          className="mt-4 inline-block rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white"
-        >
-          Aller vers login
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary">
+          <MessageSquareMore className="h-6 w-6 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Sign in required</h2>
+        <p className="text-sm text-muted-foreground">You need to be signed in to access this page.</p>
+        <Link to="/login" className="rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white hover:bg-primary/90">
+          Go to login
         </Link>
       </div>
     );
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
-  return (
-    <div className="h-[calc(100vh-92px)] rounded-2xl border border-surface-3 bg-surface-base p-2 text-foreground shadow-[0_24px_60px_rgba(0,0,0,0.6),0_0_0_1px_rgba(124,90,246,0.08)]">
-      {/* Mobile top bar */}
-      <div className="mb-2 flex items-center gap-2 rounded-xl border border-surface-3 bg-surface-3 p-2 md:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-10 px-3"
-          onClick={() => setShowMobileNav((p) => !p)}
-        >
-          {showMobileNav ? (
-            <PanelLeftClose className="h-4 w-4" />
-          ) : (
-            <Menu className="h-4 w-4" />
-          )}
-        </Button>
-        <select
-          value={selectedWorkspaceId}
-          className="h-10 min-w-0 flex-1 rounded-md border border-surface-4 bg-surface-3 px-3 text-sm text-foreground outline-none"
-          onChange={(e) => {
-            setSelectedWorkspaceId(e.target.value);
-            resetChannelSelection();
-            setSelectedDmUserId("");
-            setShowMobileNav(false);
-          }}
-        >
-          {workspaces.map((item) => (
-            <option key={item.workspaceId} value={item.workspaceId}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-        {voiceChannel.voiceChannelId ? (
-          <Badge className="border-accent/30 bg-accent/15 text-[10px] text-accent">
-            Live
-          </Badge>
-        ) : null}
+  if (workspacesQuery === undefined) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Loading...
+        </div>
       </div>
+    );
+  }
 
-      <div className="grid h-full grid-cols-1 overflow-hidden rounded-xl md:grid-cols-[76px_300px_1fr] xl:grid-cols-[76px_300px_1fr_280px]">
-        {/* Workspace switcher sidebar */}
+  if (workspacesQuery.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary">
+            <MessageSquareMore className="h-6 w-6 text-white" />
+          </div>
+          <h3 className="text-xl font-bold text-foreground">Create your first workspace</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Start by creating a workspace, then invite your team.</p>
+          <form className="mt-6 flex gap-2" onSubmit={formHandlers.onCreateWorkspace}>
+            <input
+              value={formHandlers.workspaceName}
+              onChange={(e) => formHandlers.setWorkspaceName(e.target.value)}
+              placeholder="Workspace name"
+              className="h-10 flex-1 rounded-lg border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
+            />
+            <button type="submit" className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary/90">
+              Create
+            </button>
+          </form>
+          <div className="mt-4">
+            <p className="mb-2 text-xs text-muted-foreground">Or join with an invite code:</p>
+            <form className="flex gap-2" onSubmit={formHandlers.onJoinInvite}>
+              <input
+                value={formHandlers.inviteCode}
+                onChange={(e) => formHandlers.setInviteCode(e.target.value)}
+                placeholder="Invite code"
+                className="h-10 flex-1 rounded-lg border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
+              />
+              <button type="submit" className="h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground hover:text-foreground">
+                Join
+              </button>
+            </form>
+          </div>
+          {formHandlers.mutationError && (
+            <p className="mt-3 text-xs text-red-400">{formHandlers.mutationError}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main layout ─────────────────────────────────────────────────────────
+  return (
+    <div className="flex h-screen overflow-hidden bg-background">
+      {showMobileNav && (
+        <div className="fixed inset-0 z-20 bg-black/60 md:hidden" onClick={() => setShowMobileNav(false)} />
+      )}
+
+      {/* Mobile nav drawer */}
+      <div className={`fixed inset-y-0 left-0 z-30 flex transition-transform duration-200 md:hidden ${showMobileNav ? "translate-x-0" : "-translate-x-full"}`}>
         <WorkspaceSidebar
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
-          onSelectWorkspace={setSelectedWorkspaceId}
+          onSelectWorkspace={(id) => { selectWorkspace(id); setShowMobileNav(false); }}
+          onCreateWorkspace={formHandlers.onCreateWorkspace}
+          workspaceName={formHandlers.workspaceName}
+          setWorkspaceName={formHandlers.setWorkspaceName}
+          pendingMutations={formHandlers.pendingMutations}
+          mutationError={formHandlers.mutationError}
         />
-
-        {/* Channel sidebar */}
         <ChannelList
           channels={channels}
           members={members}
@@ -470,11 +292,54 @@ function AppPage() {
           setChannelType={formHandlers.setChannelType}
           onCreateChannel={formHandlers.onCreateChannel}
           onRemoveChannel={formHandlers.onRemoveChannel}
-          showMobileNav={showMobileNav}
-          onSelectChannel={setSelectedChannelId}
+          showMobileNav={true}
+          onSelectChannel={(id) => { selectChannel(id); setShowMobileNav(false); }}
         />
+      </div>
 
-        {/* Main chat area */}
+      {/* Desktop */}
+      <WorkspaceSidebar
+        workspaces={workspaces}
+        selectedWorkspaceId={selectedWorkspaceId}
+        onSelectWorkspace={selectWorkspace}
+        onCreateWorkspace={formHandlers.onCreateWorkspace}
+        workspaceName={formHandlers.workspaceName}
+        setWorkspaceName={formHandlers.setWorkspaceName}
+        pendingMutations={formHandlers.pendingMutations}
+        mutationError={formHandlers.mutationError}
+      />
+
+      <ChannelList
+        channels={channels}
+        members={members}
+        selectedChannelId={selectedChannelId}
+        selectedWorkspaceMembership={selectedWorkspaceMembership}
+        workspaceSettings={workspaceSettings}
+        channelName={formHandlers.channelName}
+        setChannelName={formHandlers.setChannelName}
+        channelType={formHandlers.channelType}
+        setChannelType={formHandlers.setChannelType}
+        onCreateChannel={formHandlers.onCreateChannel}
+        onRemoveChannel={formHandlers.onRemoveChannel}
+        showMobileNav={false}
+        onSelectChannel={selectChannel}
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top bar */}
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3 md:hidden">
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => setShowMobileNav((p) => !p)}
+          >
+            {showMobileNav ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
+          <span className="text-sm font-semibold text-foreground">
+            {selectedChannel?.name ?? "Select a channel"}
+          </span>
+        </div>
+
         <MessagePanel
           selectedDmMember={selectedDmMember}
           selectedChannel={selectedChannel}
@@ -487,143 +352,56 @@ function AppPage() {
           voiceParticipants={voiceChannel.voiceParticipants}
           selectedChannelId={selectedChannelId}
         />
-
-        {/* Admin/Settings sidebar */}
-        <div className="hidden xl:flex xl:flex-col">
-          {/* Voice panel when in voice channel */}
-          {selectedChannel?.type === "VOICE" && !selectedDmMember ? (
-            <VoicePanel
-              voiceChannelId={voiceChannel.voiceChannelId}
-              selectedChannelId={selectedChannelId}
-              selectedChannel={selectedChannel}
-              micLevel={voiceChannel.micLevel}
-              audioSettings={voiceChannel.audioSettings}
-              inputDevices={voiceChannel.inputDevices}
-              outputDevices={voiceChannel.outputDevices}
-              voiceParticipants={voiceChannel.voiceParticipants}
-              voiceRoster={voiceChannel.voiceRoster}
-              localSpeaking={voiceChannel.localSpeaking}
-              micEnabled={voiceChannel.micEnabled}
-              deafened={voiceChannel.deafened}
-              loopbackTesting={voiceChannel.loopbackTesting}
-              diagnostics={voiceChannel.diagnostics}
-              showDiagPanel={voiceChannel.showDiagPanel}
-              voiceError={voiceChannel.voiceError}
-              voiceJoining={voiceChannel.voiceJoining}
-              sessionUser={session.user}
-              onJoinVoice={voiceChannel.joinVoiceChannel}
-              onLeaveVoice={voiceChannel.leaveVoiceChannel}
-              onToggleMic={voiceChannel.toggleMicrophone}
-              onToggleDeafen={voiceChannel.toggleDeafen}
-              onRefreshDevices={voiceChannel.refreshDevices}
-              onToggleLoopback={voiceChannel.toggleLoopbackTest}
-              onSelectInputDevice={voiceChannel.onSelectInputDevice}
-              onSelectOutputDevice={voiceChannel.onSelectOutputDevice}
-              onToggleAudioProcessing={voiceChannel.onToggleAudioProcessing}
-              onSetShowDiagPanel={voiceChannel.setShowDiagPanel}
-            />
-          ) : (
-            /* Settings panel */
-            <SettingsPanel
-              selectedWorkspaceId={selectedWorkspaceId}
-              selectedWorkspaceMembership={selectedWorkspaceMembership}
-              selectedChannel={selectedChannel}
-              workspaceSettings={workspaceSettings}
-              canModerateRoles={canModerateRoles}
-              workspaceName={formHandlers.workspaceName}
-              setWorkspaceName={formHandlers.setWorkspaceName}
-              inviteCode={formHandlers.inviteCode}
-              setInviteCode={formHandlers.setInviteCode}
-              inviteLink={formHandlers.inviteLink}
-              setInviteLink={formHandlers.setInviteLink}
-              pendingMutations={formHandlers.pendingMutations}
-              mutationError={formHandlers.mutationError}
-              onCreateWorkspace={formHandlers.onCreateWorkspace}
-              onGenerateInvite={formHandlers.onGenerateInvite}
-              onJoinInvite={formHandlers.onJoinInvite}
-              onUpdateSettings={formHandlers.onUpdateSettings}
-            />
-          )}
-
-          {/* Member panel */}
-          <MemberPanel
-            members={members}
-            sessionUserId={session.user.id}
-            canModerateRoles={canModerateRoles}
-            onUpdateMemberRole={formHandlers.onUpdateMemberRole}
-            onKickMember={formHandlers.onKickMember}
-          />
-        </div>
       </div>
 
-      {/* Mobile bottom join/invite section */}
-      <div className="mt-2 grid gap-2 xl:hidden">
-        <form
-          className="grid gap-2 rounded-lg border border-surface-3 bg-surface p-3 sm:grid-cols-2"
-          onSubmit={formHandlers.onJoinInvite}
-        >
-          <input
-            value={formHandlers.inviteCode}
-            onChange={(e) => formHandlers.setInviteCode(e.target.value)}
-            placeholder="Code invitation"
-            className="h-10 rounded-md border border-surface-3 bg-surface-2 px-3 text-xs text-foreground placeholder:text-muted-foreground"
-          />
-          <button
-            type="submit"
-            disabled={formHandlers.pendingMutations.has("joinInvite")}
-            className="h-10 rounded-md border border-surface-3 bg-surface-3 text-xs font-semibold text-muted-foreground hover:border-accent/30 hover:text-accent-soft"
-          >
-            Rejoindre
-          </button>
-        </form>
-        {formHandlers.mutationError ? (
-          <p className="rounded border border-red-500/50 bg-red-900/20 p-2 text-xs text-red-400">
-            {formHandlers.mutationError}
-          </p>
-        ) : null}
+      <div className="hidden lg:flex">
+        <RightSidebar
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedWorkspaceMembership={selectedWorkspaceMembership}
+          selectedChannel={selectedChannel}
+          workspaceSettings={workspaceSettings}
+          canModerateRoles={canModerateRoles}
+          sessionUser={session.user}
+          members={members}
+          onUpdateMemberRole={formHandlers.onUpdateMemberRole}
+          onKickMember={formHandlers.onKickMember}
+          inviteCode={formHandlers.inviteCode}
+          setInviteCode={formHandlers.setInviteCode}
+          inviteLink={formHandlers.inviteLink}
+          setInviteLink={formHandlers.setInviteLink}
+          pendingMutations={formHandlers.pendingMutations}
+          mutationError={formHandlers.mutationError}
+          onGenerateInvite={formHandlers.onGenerateInvite}
+          onJoinInvite={formHandlers.onJoinInvite}
+          onUpdateSettings={formHandlers.onUpdateSettings}
+          voiceChannelId={voiceChannel.voiceChannelId}
+          selectedChannelId={selectedChannelId}
+          micLevel={voiceChannel.micLevel}
+          audioSettings={voiceChannel.audioSettings}
+          inputDevices={voiceChannel.inputDevices}
+          outputDevices={voiceChannel.outputDevices}
+          voiceParticipants={voiceChannel.voiceParticipants}
+          voiceRoster={voiceChannel.voiceRoster}
+          localSpeaking={voiceChannel.localSpeaking}
+          micEnabled={voiceChannel.micEnabled}
+          deafened={voiceChannel.deafened}
+          loopbackTesting={voiceChannel.loopbackTesting}
+          diagnostics={[]}
+          showDiagPanel={false}
+          voiceError={voiceChannel.voiceError}
+          voiceJoining={voiceChannel.voiceJoining}
+          onJoinVoice={voiceChannel.joinVoiceChannel}
+          onLeaveVoice={voiceChannel.leaveVoiceChannel}
+          onToggleMic={voiceChannel.toggleMicrophone}
+          onToggleDeafen={voiceChannel.toggleDeafen}
+          onRefreshDevices={voiceChannel.refreshDevices}
+          onToggleLoopback={voiceChannel.toggleLoopbackTest}
+          onSelectInputDevice={voiceChannel.onSelectInputDevice}
+          onSelectOutputDevice={voiceChannel.onSelectOutputDevice}
+          onToggleAudioProcessing={voiceChannel.onToggleAudioProcessing}
+          onSetShowDiagPanel={() => {}}
+        />
       </div>
-
-      {/* Onboarding banner */}
-      {workspaces !== undefined &&
-      !workspaces.length &&
-      !onboardingDismissed ? (
-        <div className="mt-2 rounded-xl border border-surface-3 bg-gradient-to-br from-surface-3 to-surface p-6">
-          <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-            Welcome
-          </p>
-          <h3 className="mt-1 text-2xl font-extrabold text-foreground">
-            Create your first workspace
-          </h3>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Start by creating a workspace, then add text and voice channels. You
-            can also join with an invite code.
-          </p>
-          <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
-            <form
-              className="flex gap-2"
-              onSubmit={formHandlers.onCreateWorkspace}
-            >
-              <input
-                value={formHandlers.workspaceName}
-                onChange={(e) => formHandlers.setWorkspaceName(e.target.value)}
-                placeholder="Workspace name"
-                className="h-11 flex-1 rounded-md border border-surface-4 bg-surface-3 px-3 text-sm text-foreground placeholder:text-muted-foreground"
-              />
-              <Button type="submit" className="h-11 px-4">
-                Create
-              </Button>
-            </form>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 px-4"
-              onClick={() => setOnboardingDismissed(true)}
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

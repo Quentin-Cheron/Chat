@@ -18,4 +18,14 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api/auth': {
+        target: 'https://expert-pelican-49.convex.site',
+        rewrite: (path) => path.replace('/api/auth', '/api/auth'),
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
 });

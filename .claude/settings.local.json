@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__acp__Edit",
+      "mcp__acp__Bash",
+      "WebFetch(domain:skills.sh)",
+      "mcp__acp__Write",
+      "WebFetch(domain:tweakcn.com)"
+    ]
+  }
+}

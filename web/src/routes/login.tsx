@@ -32,7 +32,6 @@ function LoginPage() {
       setError(signInError.message || "Connexion échouée");
       return;
     }
-    // Le check mustChangePassword se fait dans /app via la query Convex api.users.getPasswordStatus
     await navigate({ to: search.redirect || "/app" });
   }
 
@@ -40,7 +39,7 @@ function LoginPage() {
     <div className="flex min-h-[80vh] items-center justify-center">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-gradient shadow-accent">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-sm">
             <MessageSquareMore className="h-7 w-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Connexion</h1>
@@ -49,7 +48,7 @@ function LoginPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-surface-3 bg-surface p-8 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/40">
           <form className="grid gap-5" onSubmit={onSubmit}>
             <div className="grid gap-2">
               <label
@@ -64,7 +63,7 @@ function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none"
                 placeholder="you@example.com"
               />
             </div>
@@ -81,13 +80,13 @@ function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none"
                 placeholder="••••••••••"
               />
             </div>
 
             {error ? (
-              <div className="rounded-lg border border-danger/20 bg-danger-bg/30 px-3 py-2.5 text-sm text-danger">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
                 {error}
               </div>
             ) : null}
@@ -95,7 +94,7 @@ function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-1 w-full rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="mt-1 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {loading ? "Connexion..." : "Se connecter"}
             </button>
@@ -104,7 +103,7 @@ function LoginPage() {
               Pas de compte ?{" "}
               <Link
                 to="/register"
-                className="font-semibold text-accent transition-colors hover:text-accent-soft"
+                className="font-semibold text-primary transition-colors hover:opacity-80"
               >
                 Créer un compte
               </Link>

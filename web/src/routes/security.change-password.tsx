@@ -68,7 +68,7 @@ function SecurityChangePasswordPage() {
   if (sessionPending || passwordStatus === undefined) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
+        <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
           Vérification de votre session de sécurité...
         </div>
       </div>
@@ -79,7 +79,7 @@ function SecurityChangePasswordPage() {
     <div className="flex min-h-[80vh] items-center justify-center">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-warning to-orange-600 shadow-lg shadow-orange-900/40">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg shadow-orange-900/40">
             <ShieldAlert className="h-7 w-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">
@@ -91,8 +91,8 @@ function SecurityChangePasswordPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-warning/20 bg-surface p-8 shadow-xl shadow-black/40">
-          <div className="mb-5 rounded-lg border border-warning/20 bg-warning-bg/20 px-4 py-3 text-xs text-warning">
+        <div className="rounded-2xl border border-amber-500/20 bg-card p-8 shadow-xl shadow-black/40">
+          <div className="mb-5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
             Action requise · Votre mot de passe temporaire doit être changé
             avant de continuer.
           </div>
@@ -111,7 +111,7 @@ function SecurityChangePasswordPage() {
                 required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus:border-warning/50 focus:ring-1 focus:ring-warning/20 focus:outline-none"
+                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-amber-500/50 focus:outline-none"
                 placeholder="••••••••••"
               />
             </div>
@@ -128,7 +128,7 @@ function SecurityChangePasswordPage() {
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none"
                 placeholder="10 caractères minimum"
               />
             </div>
@@ -145,13 +145,13 @@ function SecurityChangePasswordPage() {
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/50 focus-accent"
+                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none"
                 placeholder="••••••••••"
               />
             </div>
 
             {error ? (
-              <div className="rounded-lg border border-danger/20 bg-danger-bg/30 px-3 py-2.5 text-sm text-danger">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
                 {error}
               </div>
             ) : null}
@@ -159,7 +159,7 @@ function SecurityChangePasswordPage() {
             <button
               type="submit"
               disabled={pending}
-              className="mt-1 w-full rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="mt-1 w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {pending ? "Mise à jour..." : "Mettre à jour le mot de passe"}
             </button>

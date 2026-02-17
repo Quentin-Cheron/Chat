@@ -1,5 +1,4 @@
 import { Input } from "@/components/ui/input";
-import { resolveInviteCode } from "@/lib/api";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, Clock3, Server } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -46,25 +45,9 @@ function JoinPage() {
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    try {
-      const resolved = await resolveInviteCode(codeValue.trim());
-      const updated = updateRecentTargets({
-        code: resolved.code,
-        targetUrl: resolved.targetUrl,
-        at: new Date().toISOString(),
-      });
-      setRecent(updated);
-      window.location.href = resolved.redirectTo;
-    } catch (joinError) {
-      setError(
-        joinError instanceof Error
-          ? simplifyResolverError(joinError.message)
-          : "Code invalide ou expiré.",
-      );
-      setLoading(false);
-    }
+    // Code brut → rediriger vers la page /invite/$code qui gère Convex directement
+    const code = codeValue.trim().toUpperCase();
+    window.location.href = `${window.location.origin}/invite/${code}`;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -84,7 +67,7 @@ function JoinPage() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-surface-3 bg-surface p-6 shadow-xl shadow-black/30">
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-xl shadow-black/30">
         <form className="grid gap-4" onSubmit={onSubmit}>
           <div className="grid gap-2">
             <label
@@ -99,12 +82,12 @@ function JoinPage() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="https://chat.monserveur.com/invite/bM8q3xK9"
-              className="border-surface-3 bg-surface-2 text-foreground placeholder:text-muted-foreground/40 focus-accent"
+              className="border-border bg-input text-foreground placeholder:text-muted-foreground/40 focus:border-primary/50 focus:outline-none"
             />
           </div>
 
           {error ? (
-            <div className="rounded-lg border border-danger/20 bg-danger-bg/30 px-3 py-2.5 text-sm text-danger">
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
               {error}
             </div>
           ) : null}
@@ -112,7 +95,7 @@ function JoinPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center justify-center gap-2 rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {submitLabel}
             {!loading ? <ArrowRight className="h-4 w-4" /> : null}
@@ -121,7 +104,7 @@ function JoinPage() {
       </div>
 
       {recent.length ? (
-        <div className="mt-4 rounded-xl border border-surface-3 bg-surface p-4">
+        <div className="mt-4 rounded-xl border border-border bg-card p-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Derniers serveurs résolus
           </p>
@@ -134,11 +117,11 @@ function JoinPage() {
                   setCode(item.code);
                   void joinWithCode(item.code);
                 }}
-                className="flex items-center justify-between rounded-lg border border-surface-3 bg-surface-2 px-3 py-2.5 text-left transition-all hover:border-accent/20 hover:bg-surface-3"
+                className="flex items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-left transition-all hover:border-primary/20 hover:bg-muted"
               >
                 <div>
                   <p className="flex items-center gap-2 text-sm text-foreground">
-                    <Server className="h-3.5 w-3.5 text-accent" />
+                    <Server className="h-3.5 w-3.5 text-primary" />
                     {item.targetUrl}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground/60">
@@ -159,26 +142,13 @@ function JoinPage() {
         Vous avez déjà un compte ?{" "}
         <Link
           to="/login"
-          className="font-semibold text-accent transition-colors hover:text-accent-soft"
+          className="font-semibold text-primary transition-colors hover:opacity-80"
         >
           Connexion
         </Link>
       </p>
     </div>
   );
-}
-
-function simplifyResolverError(message: string): string {
-  if (message.includes("Invite code not found"))
-    return "Ce code est introuvable.";
-  if (message.includes("Invite code expired")) return "Ce code a expiré.";
-  if (message.includes("Rate limit exceeded"))
-    return "Trop de tentatives. Réessayez dans une minute.";
-  if (message.includes("HTTP 429"))
-    return "Trop de tentatives. Réessayez dans une minute.";
-  if (message.includes("HTTP 404"))
-    return "Resolver indisponible. Utilisez un lien d'invitation direct.";
-  return message;
 }
 
 function readRecentTargets(): RecentTarget[] {
@@ -191,20 +161,6 @@ function readRecentTargets(): RecentTarget[] {
   } catch {
     return [];
   }
-}
-
-function updateRecentTargets(target: RecentTarget): RecentTarget[] {
-  const current = readRecentTargets();
-  const next = [
-    target,
-    ...current.filter((item) => item.code !== target.code),
-  ].slice(0, 5);
-  try {
-    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-  } catch {
-    // ignore
-  }
-  return next;
 }
 
 function formatRelative(dateIso: string): string {

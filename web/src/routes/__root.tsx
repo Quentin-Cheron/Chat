@@ -28,14 +28,14 @@ function RootLayout() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-surface-base px-4 pb-10 pt-5 sm:px-6">
+    <div className="min-h-screen w-full bg-background px-4 pb-10 pt-5 sm:px-6">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-8 flex items-center justify-between rounded-xl border border-surface-3 bg-surface px-4 py-3 shadow-lg shadow-black/30">
+        <header className="mb-8 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 shadow-lg shadow-black/30">
           <Link
             to="/"
             className="flex items-center gap-2.5 text-sm font-semibold tracking-wide text-slate-100 transition-opacity hover:opacity-80"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-gradient shadow-accent">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary shadow-sm">
               <MessageSquareMore className="h-4 w-4 text-white" />
             </div>
             <span className="text-foreground">PRIVATECHAT</span>
@@ -45,7 +45,7 @@ function RootLayout() {
             {!isAuthRoute ? (
               <Link
                 to="/app"
-                className="rounded-lg bg-accent-gradient px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white shadow-accent transition-opacity hover:opacity-90"
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white transition-opacity hover:opacity-90"
               >
                 App
               </Link>
@@ -53,7 +53,7 @@ function RootLayout() {
             {!isAppRoute ? (
               <Link
                 to="/join"
-                className="rounded-lg border border-surface-3 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-300 transition-all hover:border-accent/30 hover:bg-surface-3 hover:text-slate-100"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted hover:text-foreground"
               >
                 Join Code
               </Link>
@@ -61,7 +61,7 @@ function RootLayout() {
             {!session?.user ? (
               <Link
                 to="/login"
-                className="rounded-lg border border-surface-3 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-300 transition-all hover:border-accent/30 hover:bg-surface-3 hover:text-slate-100"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted hover:text-foreground"
               >
                 Login
               </Link>
@@ -69,7 +69,7 @@ function RootLayout() {
             {!session?.user ? (
               <Link
                 to="/register"
-                className="rounded-lg border border-surface-3 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-300 transition-all hover:border-accent/30 hover:bg-surface-3 hover:text-slate-100"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted hover:text-foreground"
               >
                 Register
               </Link>
@@ -77,18 +77,18 @@ function RootLayout() {
             {session?.user?.email ? (
               <Link
                 to="/settings"
-                className="rounded-lg border border-surface-3 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-300 transition-all hover:border-accent/30 hover:bg-surface-3 hover:text-slate-100"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted hover:text-foreground"
               >
                 Settings
               </Link>
             ) : null}
             {isPending ? (
-              <span className="rounded-full bg-surface-3 px-3 py-1 text-xs text-muted-foreground">
+              <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
                 ...
               </span>
             ) : null}
             {session?.user?.email ? (
-              <span className="rounded-full border border-surface-3 bg-surface-2 px-3 py-1 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border bg-input px-3 py-1 text-xs text-muted-foreground">
                 {session.user.email}
               </span>
             ) : null}
@@ -96,7 +96,7 @@ function RootLayout() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 rounded-lg border border-surface-3 bg-transparent px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:border-danger/40 hover:bg-danger-bg/20 hover:text-danger"
+                className="h-8 rounded-lg border border-border bg-transparent px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
                 onClick={async () => {
                   await authClient.signOut();
                   await refetch();
@@ -107,7 +107,7 @@ function RootLayout() {
             ) : null}
             {!isAppRoute && !isAuthRoute ? (
               <Badge
-                className="border-accent/20 bg-accent/10 text-accent-soft"
+                className="border-primary/20 bg-primary/10 text-primary"
                 variant="default"
               >
                 Vos données, votre serveur

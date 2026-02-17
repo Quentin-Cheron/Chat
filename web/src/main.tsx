@@ -1,4 +1,23 @@
 import "@/styles.css";
+
+// Apply saved theme before React renders to avoid flash
+(function () {
+  const fonts: Record<string, string> = {
+    "nature":      '"DM Sans", sans-serif',
+    "tangerine":   '"Inter", sans-serif',
+    "darkmatter":  '"Geist Mono", ui-monospace, monospace',
+    "clean-slate": '"Inter", sans-serif',
+    "claude":      'ui-sans-serif, system-ui, -apple-system, sans-serif',
+    "notebook":    '"Architects Daughter", sans-serif',
+  };
+  try {
+    const theme = window.localStorage.getItem("privatechat_theme_v1") ?? "nature";
+    document.documentElement.classList.add("dark");
+    if (theme && theme !== "nature") document.documentElement.setAttribute("data-theme", theme);
+    if (fonts[theme]) document.body.style.fontFamily = fonts[theme];
+  } catch { /* ignore */ }
+})();
+
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";

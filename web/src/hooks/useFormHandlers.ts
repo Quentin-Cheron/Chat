@@ -5,9 +5,11 @@ import { useCallback, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
-export function useFormHandlers() {
-  const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId);
-  const selectedChannelId = useAppStore((s) => s.selectedChannelId);
+export function useFormHandlers(params?: { selectedWorkspaceId?: string; selectedChannelId?: string }) {
+  const selectedWorkspaceIdFromStore = useAppStore((s) => s.selectedWorkspaceId);
+  const selectedChannelIdFromStore = useAppStore((s) => s.selectedChannelId);
+  const selectedWorkspaceId = params?.selectedWorkspaceId ?? selectedWorkspaceIdFromStore;
+  const selectedChannelId = params?.selectedChannelId ?? selectedChannelIdFromStore;
   const messageDraft = useAppStore((s) => s.messageDraft);
   const setMessageDraft = useAppStore((s) => s.setMessageDraft);
   const setSelectedWorkspaceId = useAppStore((s) => s.setSelectedWorkspaceId);
@@ -121,7 +123,7 @@ export function useFormHandlers() {
       );
       if (result) {
         setInviteLink(
-          `${window.location.origin}/join/${(result as { code: string }).code}`,
+          `${window.location.origin}/invite/${(result as { code: string }).code}`,
         );
       }
     },
@@ -131,9 +133,19 @@ export function useFormHandlers() {
   const onJoinInvite = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (!inviteCode.trim()) return;
+      const raw = inviteCode.trim();
+      if (!raw) return;
+      // Extract code from a full invite URL if pasted
+      let code = raw;
+      try {
+        const url = new URL(raw);
+        const match = url.pathname.match(/\/invite\/([^/?#]+)/);
+        if (match?.[1]) code = decodeURIComponent(match[1]);
+      } catch {
+        // not a URL, use as-is
+      }
       const workspaceId = await withPending("joinInvite", () =>
-        joinInviteMutation({ code: inviteCode.trim().toUpperCase() }),
+        joinInviteMutation({ code: code.toUpperCase() }),
       );
       if (workspaceId) {
         setInviteCode("");

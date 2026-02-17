@@ -1,9 +1,10 @@
 import { Input } from "@/components/ui/input";
 import { readAudioSettings, writeAudioSettings } from "@/lib/audio-settings";
 import { authClient } from "@/lib/auth-client";
+import { THEMES, useTheme } from "@/hooks/useTheme";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { Bell, Mic, Shield, User } from "lucide-react";
+import { Bell, Mic, Palette, Shield, User } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-type SettingsTab = "account" | "security" | "audio" | "notifications";
+type SettingsTab = "account" | "security" | "audio" | "notifications" | "appearance";
 
 type NotificationSettings = {
   muteAll: boolean;
@@ -65,11 +66,13 @@ const TABS: { id: SettingsTab; label: string; icon: typeof User }[] = [
   { id: "security", label: "Sécurité", icon: Shield },
   { id: "audio", label: "Audio", icon: Mic },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "appearance", label: "Apparence", icon: Palette },
 ];
 
 function SettingsPage() {
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const { theme, setTheme } = useTheme();
 
   const updateUserMut = useMutation(api.users.updateUser);
   const changePasswordMut = useMutation(api.users.changePassword);
@@ -269,9 +272,7 @@ function SettingsPage() {
     }
     setAccountPending(true);
     try {
-      // Update name via Convex mutation
       await updateUserMut({ name: name.trim() });
-      // Update email via authClient if changed
       if (emailChanged) {
         const { error } = await authClient.changeEmail({
           newEmail: email,
@@ -327,7 +328,7 @@ function SettingsPage() {
 
   if (sessionPending) {
     return (
-      <div className="rounded-xl border border-surface-3 bg-surface p-6 text-sm text-muted-foreground">
+      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
         Chargement des paramètres...
       </div>
     );
@@ -336,7 +337,7 @@ function SettingsPage() {
   return (
     <div className="grid gap-4 md:grid-cols-[220px_1fr]">
       {/* Sidebar nav */}
-      <div className="h-fit rounded-xl border border-surface-3 bg-surface p-3">
+      <div className="h-fit rounded-xl border border-border bg-card p-3">
         <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Paramètres
         </p>
@@ -348,12 +349,12 @@ function SettingsPage() {
               onClick={() => setActiveTab(id)}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                 activeTab === id
-                  ? "bg-accent/15 text-accent-soft"
-                  : "text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               <Icon
-                className={`h-4 w-4 ${activeTab === id ? "text-accent" : "text-muted-foreground"}`}
+                className={`h-4 w-4 ${activeTab === id ? "text-primary" : "text-muted-foreground"}`}
               />
               {label}
             </button>
@@ -362,7 +363,7 @@ function SettingsPage() {
       </div>
 
       {/* Content */}
-      <div className="rounded-xl border border-surface-3 bg-surface p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="mb-6">
           <h2 className="text-xl font-bold text-foreground">
             {activeTab === "account"
@@ -371,21 +372,16 @@ function SettingsPage() {
                 ? "Sécurité"
                 : activeTab === "audio"
                   ? "Audio"
-                  : "Notifications"}
+                  : activeTab === "notifications"
+                    ? "Notifications"
+                    : "Apparence"}
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {activeTab === "account"
-              ? "Nom d'utilisateur et adresse email."
-              : null}
-            {activeTab === "security"
-              ? "Mot de passe et sécurité d'accès."
-              : null}
-            {activeTab === "audio"
-              ? "Entrée/sortie audio et test micro."
-              : null}
-            {activeTab === "notifications"
-              ? "Comportement des alertes et sons."
-              : null}
+            {activeTab === "account" ? "Nom d'utilisateur et adresse email." : null}
+            {activeTab === "security" ? "Mot de passe et sécurité d'accès." : null}
+            {activeTab === "audio" ? "Entrée/sortie audio et test micro." : null}
+            {activeTab === "notifications" ? "Comportement des alertes et sons." : null}
+            {activeTab === "appearance" ? "Thème de couleurs de l'interface." : null}
           </p>
         </div>
 
@@ -398,7 +394,7 @@ function SettingsPage() {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                className="border-border bg-input text-foreground focus:border-primary/50 focus:outline-none"
               />
             </div>
             <div className="grid gap-2">
@@ -408,7 +404,7 @@ function SettingsPage() {
               <Input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                className="border-border bg-input text-foreground focus:border-primary/50 focus:outline-none"
               />
             </div>
             {emailChanged ? (
@@ -420,20 +416,20 @@ function SettingsPage() {
                   type="password"
                   value={currentPasswordForEmail}
                   onChange={(e) => setCurrentPasswordForEmail(e.target.value)}
-                  className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                  className="border-border bg-input text-foreground focus:border-primary/50 focus:outline-none"
                 />
               </div>
             ) : null}
             {settingsError ? (
-              <p className="text-xs text-danger">{settingsError}</p>
+              <p className="text-xs text-red-400">{settingsError}</p>
             ) : null}
             {settingsSuccess ? (
-              <p className="text-xs text-success">{settingsSuccess}</p>
+              <p className="text-xs text-green-500">{settingsSuccess}</p>
             ) : null}
             <button
               type="submit"
               disabled={accountPending}
-              className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {accountPending ? "Mise à jour..." : "Enregistrer"}
             </button>
@@ -450,7 +446,7 @@ function SettingsPage() {
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                className="border-border bg-input text-foreground focus:border-primary/50 focus:outline-none"
               />
             </div>
             <div className="grid gap-2">
@@ -461,7 +457,7 @@ function SettingsPage() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                className="border-border bg-input text-foreground focus:border-primary/50 focus:outline-none"
               />
             </div>
             <div className="grid gap-2">
@@ -472,19 +468,19 @@ function SettingsPage() {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="border-surface-3 bg-surface-2 text-foreground focus-accent"
+                className="border-border bg-input text-foreground focus:border-primary/50 focus:outline-none"
               />
             </div>
             {passwordError ? (
-              <p className="text-xs text-danger">{passwordError}</p>
+              <p className="text-xs text-red-400">{passwordError}</p>
             ) : null}
             {settingsSuccess ? (
-              <p className="text-xs text-success">{settingsSuccess}</p>
+              <p className="text-xs text-green-500">{settingsSuccess}</p>
             ) : null}
             <button
               type="submit"
               disabled={passwordPending}
-              className="rounded-xl bg-accent-gradient py-2.5 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="rounded-xl bg-primary py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {passwordPending ? "Mise à jour..." : "Changer le mot de passe"}
             </button>
@@ -497,14 +493,14 @@ function SettingsPage() {
               <button
                 type="button"
                 onClick={() => void requestAudioPermission()}
-                className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground transition-all hover:border-accent/30 hover:text-foreground"
+                className="rounded-lg border border-border bg-input px-3 py-2 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground"
               >
                 Autoriser micro
               </button>
               <button
                 type="button"
                 onClick={() => void refreshDevices()}
-                className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground transition-all hover:border-accent/30 hover:text-foreground"
+                className="rounded-lg border border-border bg-input px-3 py-2 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground"
               >
                 Rafraîchir
               </button>
@@ -518,7 +514,7 @@ function SettingsPage() {
                 onChange={(e) =>
                   onAudioSettingsChange({ inputDeviceId: e.target.value })
                 }
-                className="h-10 rounded-lg border border-surface-3 bg-surface-2 px-3 text-sm text-foreground outline-none focus:border-accent/50"
+                className="h-10 rounded-lg border border-border bg-input px-3 text-sm text-foreground outline-none focus:border-primary/50"
               >
                 <option value="">Défaut système</option>
                 {inputDevices.map((d) => (
@@ -537,7 +533,7 @@ function SettingsPage() {
                 onChange={(e) =>
                   onAudioSettingsChange({ outputDeviceId: e.target.value })
                 }
-                className="h-10 rounded-lg border border-surface-3 bg-surface-2 px-3 text-sm text-foreground outline-none focus:border-accent/50"
+                className="h-10 rounded-lg border border-border bg-input px-3 text-sm text-foreground outline-none focus:border-primary/50"
               >
                 <option value="">Défaut système</option>
                 {outputDevices.map((d) => (
@@ -557,12 +553,12 @@ function SettingsPage() {
                 max={80}
                 value={voiceThreshold}
                 onChange={(e) => setVoiceThreshold(Number(e.target.value))}
-                className="accent-accent"
+                className="accent-primary"
               />
             </div>
-            <div className="overflow-hidden rounded-lg bg-surface-2 p-1">
+            <div className="overflow-hidden rounded-lg bg-input p-1">
               <div
-                className={`h-2 rounded-full transition-all duration-75 ${isVoiceDetected ? "bg-success" : "bg-accent/50"}`}
+                className={`h-2 rounded-full transition-all duration-75 ${isVoiceDetected ? "bg-green-500" : "bg-primary/50"}`}
                 style={{ width: `${micLevel}%` }}
               />
             </div>
@@ -571,7 +567,7 @@ function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => void startMicTest()}
-                  className="rounded-xl bg-accent-gradient px-4 py-2 text-sm font-semibold text-white shadow-accent transition-opacity hover:opacity-90"
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
                 >
                   Tester le micro
                 </button>
@@ -580,7 +576,7 @@ function SettingsPage() {
                   <button
                     type="button"
                     onClick={stopMicTest}
-                    className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground hover:border-danger/40 hover:text-danger"
+                    className="rounded-lg border border-border bg-input px-3 py-2 text-sm text-muted-foreground hover:border-red-500/40 hover:text-red-400"
                   >
                     Arrêter le test
                   </button>
@@ -591,7 +587,7 @@ function SettingsPage() {
                     onMouseLeave={() => setPushToTalkActive(false)}
                     onTouchStart={() => setPushToTalkActive(true)}
                     onTouchEnd={() => setPushToTalkActive(false)}
-                    className="rounded-lg border border-surface-3 bg-surface-2 px-3 py-2 text-sm text-muted-foreground hover:bg-surface-3"
+                    className="rounded-lg border border-border bg-input px-3 py-2 text-sm text-muted-foreground hover:bg-muted"
                   >
                     Maintenir pour s'entendre
                   </button>
@@ -602,7 +598,7 @@ function SettingsPage() {
               "Maintenir pour s'entendre" simule un mode push-to-talk de test.
             </p>
             {audioError ? (
-              <p className="text-xs text-danger">{audioError}</p>
+              <p className="text-xs text-red-400">{audioError}</p>
             ) : null}
           </div>
         ) : null}
@@ -631,7 +627,7 @@ function SettingsPage() {
             ).map(({ key, label, disabled }) => (
               <label
                 key={key}
-                className={`flex items-center justify-between rounded-lg border border-surface-3 bg-surface-2 px-4 py-3 ${disabled ? "opacity-50" : "cursor-pointer hover:bg-surface-3"} transition-all`}
+                className={`flex items-center justify-between rounded-lg border border-border bg-input px-4 py-3 ${disabled ? "opacity-50" : "cursor-pointer hover:bg-muted"} transition-all`}
               >
                 <span className="text-sm text-foreground">{label}</span>
                 <input
@@ -644,12 +640,54 @@ function SettingsPage() {
                       [key]: e.target.checked,
                     }))
                   }
-                  className="h-4 w-4 accent-accent"
+                  className="h-4 w-4 accent-primary"
                 />
               </label>
             ))}
             <p className="text-xs text-muted-foreground/70">
               Préférences stockées localement sur cet appareil.
+            </p>
+          </div>
+        ) : null}
+
+        {activeTab === "appearance" ? (
+          <div className="grid max-w-md gap-4">
+            <div className="grid grid-cols-3 gap-3">
+              {THEMES.map((t) => {
+                const isActive = theme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTheme(t.id)}
+                    className={`group relative flex flex-col items-center gap-2 rounded-xl border p-3 transition-all ${
+                      isActive
+                        ? "border-primary bg-primary/10 ring-1 ring-primary"
+                        : "border-border bg-input hover:border-primary/40 hover:bg-muted"
+                    }`}
+                  >
+                    {/* Color preview */}
+                    <div
+                      className="h-10 w-full rounded-lg"
+                      style={{ background: t.bg }}
+                    >
+                      <div
+                        className="h-full w-2/5 rounded-lg opacity-80"
+                        style={{ background: t.primary }}
+                      />
+                    </div>
+                    <span className={`text-xs font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+                      {t.label}
+                    </span>
+                    {isActive && (
+                      <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground/70">
+              Thème stocké localement sur cet appareil.
             </p>
           </div>
         ) : null}
