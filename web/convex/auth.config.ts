@@ -7,7 +7,7 @@ export default {
     {
       type: "customJwt",
       applicationID: "convex",
-      algorithm: "EdDSA",
+      algorithm: "ES256",
       issuer: siteUrl,
       jwks: `${siteUrl}/api/auth/convex/jwks`,
     },

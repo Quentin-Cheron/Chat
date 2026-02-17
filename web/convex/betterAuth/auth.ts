@@ -36,6 +36,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
         authConfig,
         jwt: { expirationSeconds: 60 * 15 },
         jwksRotateOnTokenGenerationError: true,
+        options: { jwks: { keyPairConfig: { alg: "ES256" } } },
       }),
     ],
   } satisfies BetterAuthOptions;
