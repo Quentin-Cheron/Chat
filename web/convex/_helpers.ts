@@ -1,37 +1,68 @@
 import { Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
 
-// Récupère l'authId (sub du JWT) de l'utilisateur connecté
-export async function requireAuth(ctx: QueryCtx | MutationCtx): Promise<string> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Non authentifié");
-  return identity.subject; // = userId better-auth
+// Auth safe
+export async function requireAuth(
+  ctx: QueryCtx | MutationCtx,
+): Promise<string | null> {
+  try {
+    const identity = await ctx.auth.getUserIdentity();
+
+    if (!identity) return null;
+
+    return identity.subject;
+
+  } catch (err) {
+    console.error("requireAuth error:", err);
+    return null;
+  }
 }
 
-// Vérifie que l'utilisateur est membre d'un workspace et retourne son membership
+// Member safe
 export async function requireMember(
   ctx: QueryCtx | MutationCtx,
   workspaceId: Id<"workspaces">,
 ) {
-  const authId = await requireAuth(ctx);
-  const member = await ctx.db
-    .query("members")
-    .withIndex("by_workspace_user", (q) =>
-      q.eq("workspaceId", workspaceId).eq("userId", authId),
-    )
-    .unique();
-  if (!member) throw new Error("Vous n'êtes pas membre de ce workspace");
-  return { member, authId };
+  try {
+    const authId = await requireAuth(ctx);
+
+    if (!authId) return null;
+
+    const member = await ctx.db
+      .query("members")
+      .withIndex("by_workspace_user", (q) =>
+        q.eq("workspaceId", workspaceId).eq("userId", authId),
+      )
+      .unique();
+
+    if (!member) return null;
+
+    return { member, authId };
+
+  } catch (err) {
+    console.error("requireMember error:", err);
+    return null;
+  }
 }
 
-// Vérifie que l'utilisateur est OWNER ou ADMIN
+// Moderator safe
 export async function requireModerator(
   ctx: QueryCtx | MutationCtx,
   workspaceId: Id<"workspaces">,
 ) {
-  const { member, authId } = await requireMember(ctx, workspaceId);
-  if (member.role === "MEMBER") throw new Error("Permissions insuffisantes");
-  return { member, authId };
+  try {
+    const data = await requireMember(ctx, workspaceId);
+
+    if (!data) return null;
+
+    if (data.member.role === "MEMBER") return null;
+
+    return data;
+
+  } catch (err) {
+    console.error("requireModerator error:", err);
+    return null;
+  }
 }
 
 export function canModerate(role: string) {
