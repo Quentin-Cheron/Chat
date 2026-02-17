@@ -14,7 +14,6 @@ import type * as http from "../http.js";
 import type * as invites from "../invites.js";
 import type * as members from "../members.js";
 import type * as messages from "../messages.js";
-import type * as resolver from "../resolver.js";
 import type * as users from "../users.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -31,7 +30,6 @@ declare const fullApi: ApiFromModules<{
   invites: typeof invites;
   members: typeof members;
   messages: typeof messages;
-  resolver: typeof resolver;
   users: typeof users;
   workspaces: typeof workspaces;
 }>;

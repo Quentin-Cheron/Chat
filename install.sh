@@ -256,7 +256,7 @@ setup_convex() {
       npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
       npx convex env set BETTER_AUTH_URL 'https://$DOMAIN_VAL' &&
       npx convex env set SITE_URL '$SITE_URL_VAL' &&
-      npx convex env set RESOLVER_REGISTER_TOKEN '$RESOLVER_TOKEN'
+      echo "Convex env configured"
     " || fail "Configuration des variables Convex échouée"
 
   log "Convex configuré avec succès"
