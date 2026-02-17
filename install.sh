@@ -254,8 +254,7 @@ setup_convex() {
     sh -c "
       npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local &&
       npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
-      npx convex env set BETTER_AUTH_URL 'http://convex:3211' &&
-      npx convex env set CONVEX_SITE_URL 'https://$DOMAIN_VAL' &&
+      npx convex env set BETTER_AUTH_URL 'https://$DOMAIN_VAL' &&
       npx convex env set SITE_URL '$SITE_URL_VAL' &&
       npx convex env set RESOLVER_REGISTER_TOKEN '$RESOLVER_TOKEN'
     " || fail "Configuration des variables Convex échouée"
