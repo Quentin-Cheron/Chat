@@ -172,11 +172,10 @@ ADMIN_PASSWORD=$ADMIN_PASSWORD
 BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
 
 # Convex self-hosted
-# URL publique du backend Convex (queries/mutations WebSocket)
+# URL publique du backend Convex (queries/mutations WebSocket) — routée par Caddy vers convex:3210
 VITE_CONVEX_URL=https://$DOMAIN/convex
-# URL publique du site Convex (HTTP actions, Better Auth) — racine du domaine
-# Better Auth appellera https://DOMAIN/api/auth/* directement
-VITE_CONVEX_SITE_URL=https://$DOMAIN
+# URL publique du site Convex (HTTP actions, Better Auth) — routée par Caddy vers convex:3210/http
+VITE_CONVEX_SITE_URL=https://$DOMAIN/convex-site
 CONVEX_SITE_URL=https://$DOMAIN/convex-site
 # CONVEX_SITE_ORIGIN = URL racine pour le container Convex (sans path)
 CONVEX_SITE_ORIGIN=https://$DOMAIN
