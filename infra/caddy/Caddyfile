@@ -15,7 +15,7 @@
   }
 
   # Better Auth + HTTP actions → convex:3211
-  @auth path /api/auth/* /api/auth
+  @auth path /api/auth/*
   handle @auth {
     reverse_proxy convex:3211 {
       header_up Host {host}
