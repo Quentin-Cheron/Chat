@@ -10,7 +10,7 @@ services:
       # URL interne au réseau Docker (utilisée par le backend Convex lui-même)
       - CONVEX_CLOUD_ORIGIN=http://convex:3210
       # URL publique du site Convex (pour les HTTP actions / Better Auth) — sans path
-      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN:-http://localhost:3211}
+      - CONVEX_SITE_ORIGIN=https://chat.private-chat.site
       # Clé admin pour les déploiements self-hosted
       - CONVEX_ADMIN_KEY=insecure-0000000000000000000000000000000000000000000000000000000000000001
     volumes:
@@ -57,9 +57,9 @@ services:
         - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
         - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
         # URL Convex cloud (WebSocket/HTTP pour les queries/mutations)
-        - VITE_CONVEX_URL=${VITE_CONVEX_URL:-http://localhost:3210}
+        - VITE_CONVEX_URL=https://chat.private-chat.site/convex
         # URL Convex site (HTTP actions, Better Auth)
-        - VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL:-http://localhost:3211}
+        - VITE_CONVEX_SITE_URL=https://chat.private-chat.site/convex-site
     image: privatechat-web:local
     container_name: privatechat-web
     restart: unless-stopped

@@ -37,7 +37,13 @@
 
   # Voice API (Socket.io + mediasoup)
   @socketio path /socket.io*
-  reverse_proxy @socketio api:3001
+  handle @socketio {
+    reverse_proxy api:3001 {
+      transport http {
+        versions h1
+      }
+    }
+  }
 
   # Frontend
   reverse_proxy web:80
