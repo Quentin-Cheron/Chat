@@ -32,12 +32,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     },
     plugins: [
       crossDomain({ siteUrl }),
-      convex({
-        authConfig,
-        jwt: { expirationSeconds: 60 * 15 },
-        jwksRotateOnTokenGenerationError: true,
-        options: { jwks: { keyPairConfig: { alg: "ES256" } } },
-      }),
+      convex({ authConfig, jwksRotateOnTokenGenerationError: true }),
     ],
   } satisfies BetterAuthOptions;
 };
