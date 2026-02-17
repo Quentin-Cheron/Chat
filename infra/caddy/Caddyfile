@@ -14,24 +14,36 @@
     Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss: ws:;"
   }
 
-  # Better Auth + HTTP actions → convex:3211 (site proxy, gère /api/auth/* nativement)
+  # Better Auth + HTTP actions → convex:3211
   @auth path /api/auth/* /api/auth
   handle @auth {
-    reverse_proxy convex:3211
+    reverse_proxy convex:3211 {
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
+    }
   }
 
-  # Convex backend (queries, mutations, WebSocket — port 3210)
+  # Convex backend (queries, mutations, WS) → 3210
   @convex path /convex/*
   handle @convex {
     uri strip_prefix /convex
-    reverse_proxy convex:3210
+    reverse_proxy convex:3210 {
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
+    }
   }
 
-  # Convex site HTTP actions génériques → convex:3211
+  # Convex site HTTP actions → 3211
   @convex-site path /convex-site/*
   handle @convex-site {
     uri strip_prefix /convex-site
-    reverse_proxy convex:3211
+    reverse_proxy convex:3211 {
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
+    }
   }
 
   # Voice API (Socket.io + mediasoup)
@@ -41,9 +53,16 @@
       transport http {
         versions h1
       }
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
     }
   }
 
   # Frontend
-  reverse_proxy web:80
+  reverse_proxy web:80 {
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-For {remote}
+  }
 }
