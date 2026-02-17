@@ -116,13 +116,7 @@ export const tables = {
     .index("by_code", ["code"])
     .index("by_workspace", ["workspaceId"]),
 
-  inviteRoutes: defineTable({
-    code: v.string(),
-    targetUrl: v.string(),
-    expiresAt: v.optional(v.number()),
-    resolveCount: v.number(),
-    lastResolvedAt: v.optional(v.number()),
-  }).index("by_code", ["code"]),
+
 };
 
 const schema = defineSchema(tables);

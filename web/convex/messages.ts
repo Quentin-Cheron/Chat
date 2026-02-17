@@ -37,10 +37,8 @@ export const send = mutation({
     await requireMember(ctx, channel.workspaceId);
 
     // Récupérer le nom de l'auteur depuis la table user (Better Auth)
-    const user = await ctx.db
-      .query("user")
-      .withIndex("userId", (q) => q.eq("userId", authId))
-      .unique();
+    // identity.subject = _id de la table user
+    const user = await ctx.db.get(authId as any);
 
     return ctx.db.insert("messages", {
       channelId,
