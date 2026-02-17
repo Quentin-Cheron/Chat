@@ -6,8 +6,7 @@ COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 ENV_FILE="$APP_DIR/.env"
 ARCHIVE_URL="${ARCHIVE_URL:-https://github.com/Quentin-Cheron/Chat/archive/refs/heads/main.tar.gz}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
-INSTALL_ROLE="${INSTALL_ROLE:-standalone}" # instance | resolver | standalone
-DEFAULT_CONTROL_PLANE_URL="${DEFAULT_CONTROL_PLANE_URL:-}"
+
 
 log() { printf "\n[privatechat] %s\n" "$*"; }
 fail() { printf "\n[privatechat][error] %s\n" "$*" >&2; exit 1; }
@@ -36,22 +35,13 @@ ask_inputs() {
   DOMAIN="${1:-${DOMAIN:-}}"
   ADMIN_EMAIL="${ADMIN_EMAIL:-}"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
-  CONTROL_PLANE_URL="${CONTROL_PLANE_URL:-}"
   INSTANCE_PUBLIC_URL="${INSTANCE_PUBLIC_URL:-}"
-  RESOLVER_REGISTER_TOKEN="${RESOLVER_REGISTER_TOKEN:-}"
-  VITE_RESOLVER_BASE_URL="${VITE_RESOLVER_BASE_URL:-}"
-  VITE_PUBLIC_JOIN_BASE_URL="${VITE_PUBLIC_JOIN_BASE_URL:-}"
   VITE_TURN_URL="${VITE_TURN_URL:-}"
   VITE_TURN_USERNAME="${VITE_TURN_USERNAME:-}"
   VITE_TURN_PASSWORD="${VITE_TURN_PASSWORD:-}"
   MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-}"
   MEDIASOUP_MIN_PORT="${MEDIASOUP_MIN_PORT:-40000}"
   MEDIASOUP_MAX_PORT="${MEDIASOUP_MAX_PORT:-40100}"
-
-  case "$INSTALL_ROLE" in
-    instance|resolver|standalone) ;;
-    *) fail "INSTALL_ROLE invalide: $INSTALL_ROLE (instance|resolver|standalone)" ;;
-  esac
 
   # Résolution automatique du domaine si non fourni
   if [ -z "$DOMAIN" ]; then
@@ -76,13 +66,6 @@ ask_inputs() {
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)}"
   INSTANCE_PUBLIC_URL="${INSTANCE_PUBLIC_URL:-https://$DOMAIN}"
   MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-$DOMAIN}"
-  RESOLVER_REGISTER_TOKEN="${RESOLVER_REGISTER_TOKEN:-$(openssl rand -hex 24)}"
-  VITE_RESOLVER_BASE_URL="${VITE_RESOLVER_BASE_URL:-$CONTROL_PLANE_URL}"
-  VITE_PUBLIC_JOIN_BASE_URL="${VITE_PUBLIC_JOIN_BASE_URL:-$CONTROL_PLANE_URL}"
-
-  if [ "$INSTALL_ROLE" = "instance" ] && [ -z "$CONTROL_PLANE_URL" ] && [ -n "$DEFAULT_CONTROL_PLANE_URL" ]; then
-    CONTROL_PLANE_URL="$DEFAULT_CONTROL_PLANE_URL"
-  fi
 }
 
 install_base_packages() {
@@ -183,13 +166,6 @@ CONVEX_SITE_ORIGIN=https://$DOMAIN
 # URL publique du frontend (pour CORS Better Auth)
 SITE_URL=https://$DOMAIN
 
-# Resolver
-CONTROL_PLANE_URL=$CONTROL_PLANE_URL
-INSTANCE_PUBLIC_URL=$INSTANCE_PUBLIC_URL
-RESOLVER_REGISTER_TOKEN=$RESOLVER_REGISTER_TOKEN
-VITE_RESOLVER_BASE_URL=$VITE_RESOLVER_BASE_URL
-VITE_PUBLIC_JOIN_BASE_URL=$VITE_PUBLIC_JOIN_BASE_URL
-
 # Mediasoup (WebRTC)
 VITE_TURN_URL=$VITE_TURN_URL
 VITE_TURN_USERNAME=$VITE_TURN_USERNAME
@@ -256,7 +232,7 @@ setup_convex() {
       npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
       npx convex env set BETTER_AUTH_URL 'https://$DOMAIN_VAL' &&
       npx convex env set SITE_URL '$SITE_URL_VAL' &&
-      echo "Convex env configured"
+      echo "done"
     " || fail "Configuration des variables Convex échouée"
 
   log "Convex configuré avec succès"

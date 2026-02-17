@@ -12,7 +12,6 @@ echo -e "${BOLD}=== PrivateChat Deploy ===${NC}"
 if [ ! -f .env ]; then
   echo -e "${YELLOW}[!] No .env found — generating automatically...${NC}"
 
-  # Détecter le domaine : variable d'environnement > argument > auto-detect IP publique
   if [ -n "$DOMAIN" ]; then
     DETECTED_DOMAIN="$DOMAIN"
   elif [ -n "$1" ]; then
@@ -21,7 +20,6 @@ if [ ! -f .env ]; then
     DETECTED_DOMAIN=$(curl -sf https://api.ipify.org || curl -sf https://ifconfig.me || echo "localhost")
   fi
 
-  # Détecter l'IP publique pour mediasoup
   PUBLIC_IP=$(curl -sf https://api.ipify.org || curl -sf https://ifconfig.me || echo "127.0.0.1")
 
   cat > .env <<EOF
@@ -32,11 +30,9 @@ ADMIN_EMAIL=admin@${DETECTED_DOMAIN}
 # Convex
 CONVEX_SITE_ORIGIN=https://${DETECTED_DOMAIN}
 VITE_CONVEX_URL=https://${DETECTED_DOMAIN}/convex
-VITE_CONVEX_SITE_URL=https://${DETECTED_DOMAIN}/convex-site
+VITE_CONVEX_SITE_URL=https://${DETECTED_DOMAIN}
 
-# Frontend
-VITE_RESOLVER_BASE_URL=
-VITE_PUBLIC_JOIN_BASE_URL=https://${DETECTED_DOMAIN}
+# TURN server pour la voix (optionnel)
 VITE_TURN_URL=
 VITE_TURN_USERNAME=
 VITE_TURN_PASSWORD=
@@ -46,8 +42,6 @@ MEDIASOUP_ANNOUNCED_IP=${PUBLIC_IP}
 MEDIASOUP_MIN_PORT=40000
 MEDIASOUP_MAX_PORT=40100
 
-# Misc
-RESOLVER_REGISTER_TOKEN=change-me-resolver
 NODE_ENV=production
 EOF
 

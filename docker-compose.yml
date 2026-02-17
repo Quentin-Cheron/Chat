@@ -53,8 +53,6 @@ services:
       context: ./web
       dockerfile: Dockerfile
       args:
-        - VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
-        - VITE_PUBLIC_JOIN_BASE_URL=${VITE_PUBLIC_JOIN_BASE_URL}
         - VITE_TURN_URL=${VITE_TURN_URL}
         - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
         - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
@@ -95,8 +93,6 @@ services:
     container_name: privatechat-desktop-builder
     profiles:
       - desktop-build
-    environment:
-      - VITE_RESOLVER_BASE_URL=${VITE_RESOLVER_BASE_URL}
     working_dir: /workspace/desktop
     volumes:
       - ./:/workspace
