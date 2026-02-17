@@ -1,6 +1,15 @@
-import { getAuthConfigProvider } from "@convex-dev/better-auth/auth-config";
 import { type AuthConfig } from "convex/server";
 
+const siteUrl = process.env.CONVEX_SITE_URL ?? "http://localhost:3211";
+
 export default {
-  providers: [getAuthConfigProvider()],
+  providers: [
+    {
+      type: "customJwt",
+      applicationID: "convex",
+      algorithm: "EdDSA",
+      issuer: siteUrl,
+      jwks: `${siteUrl}/api/auth/convex/jwks`,
+    },
+  ],
 } satisfies AuthConfig;

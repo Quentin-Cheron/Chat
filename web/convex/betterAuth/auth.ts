@@ -30,7 +30,14 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     emailAndPassword: {
       enabled: true,
     },
-    plugins: [crossDomain({ siteUrl }), convex({ authConfig })],
+    plugins: [
+      crossDomain({ siteUrl }),
+      convex({
+        authConfig,
+        jwt: { expirationSeconds: 60 * 15 },
+        jwksRotateOnTokenGenerationError: true,
+      }),
+    ],
   } satisfies BetterAuthOptions;
 };
 
