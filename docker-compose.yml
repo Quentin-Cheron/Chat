@@ -13,6 +13,8 @@ services:
       - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN}
       # Clé admin pour les déploiements self-hosted
       - CONVEX_ADMIN_KEY=insecure-0000000000000000000000000000000000000000000000000000000000000001
+      # Activation des HTTP actions pour Better Auth
+      - CONVEX_ENABLE_HTTP_ACTIONS=true
     volumes:
       - convex_data:/convex/data
     healthcheck:
