@@ -231,7 +231,7 @@ setup_convex() {
   BETTER_AUTH_SECRET="$(grep ^BETTER_AUTH_SECRET "$ENV_FILE" | cut -d= -f2)"
   CONVEX_SITE_URL_VAL="$(grep ^CONVEX_SITE_URL "$ENV_FILE" | cut -d= -f2)"
   SITE_URL_VAL="$(grep ^SITE_URL "$ENV_FILE" | cut -d= -f2)"
-  RESOLVER_TOKEN="$(grep ^RESOLVER_REGISTER_TOKEN "$ENV_FILE" | cut -d= -f2)"
+
   DOMAIN_VAL="$(grep ^DOMAIN "$ENV_FILE" | cut -d= -f2)"
   MINIO_ROOT_USER_VAL="$(grep ^MINIO_ROOT_USER "$ENV_FILE" | cut -d= -f2)"
   MINIO_ROOT_PASSWORD_VAL="$(grep ^MINIO_ROOT_PASSWORD "$ENV_FILE" | cut -d= -f2)"
