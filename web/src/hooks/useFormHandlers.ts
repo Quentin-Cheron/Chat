@@ -1,15 +1,23 @@
 import { useAppStore } from "@/store/app-store";
+import type { UploadedFile } from "@/types/files";
 import { useMutation } from "convex/react";
 import type { FormEvent } from "react";
 import { useCallback, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
-export function useFormHandlers(params?: { selectedWorkspaceId?: string; selectedChannelId?: string }) {
-  const selectedWorkspaceIdFromStore = useAppStore((s) => s.selectedWorkspaceId);
+export function useFormHandlers(params?: {
+  selectedWorkspaceId?: string;
+  selectedChannelId?: string;
+}) {
+  const selectedWorkspaceIdFromStore = useAppStore(
+    (s) => s.selectedWorkspaceId,
+  );
   const selectedChannelIdFromStore = useAppStore((s) => s.selectedChannelId);
-  const selectedWorkspaceId = params?.selectedWorkspaceId ?? selectedWorkspaceIdFromStore;
-  const selectedChannelId = params?.selectedChannelId ?? selectedChannelIdFromStore;
+  const selectedWorkspaceId =
+    params?.selectedWorkspaceId ?? selectedWorkspaceIdFromStore;
+  const selectedChannelId =
+    params?.selectedChannelId ?? selectedChannelIdFromStore;
   const messageDraft = useAppStore((s) => s.messageDraft);
   const setMessageDraft = useAppStore((s) => s.setMessageDraft);
   const setSelectedWorkspaceId = useAppStore((s) => s.setSelectedWorkspaceId);
@@ -30,11 +38,18 @@ export function useFormHandlers(params?: { selectedWorkspaceId?: string; selecte
   const createChannelMutation = useMutation(api.channels.create);
   const removeChannelMutation = useMutation(api.channels.remove);
   const sendMessageMutation = useMutation(api.messages.send);
+  const sendWithAttachmentsMutation = useMutation(
+    api.messages.sendWithAttachments,
+  );
+  const updateMessageMutation = useMutation(api.messages.update);
+  const removeMessageMutation = useMutation(api.messages.remove);
   const createInviteMutation = useMutation(api.invites.create);
   const joinInviteMutation = useMutation(api.invites.join);
   const updateSettingsMutation = useMutation(api.workspaces.updateSettings);
   const updateRoleMutation = useMutation(api.members.updateRole);
   const kickMemberMutation = useMutation(api.members.kick);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toggleReactionMutation = useMutation((api as any).reactions.toggle);
 
   function withPending<T>(
     key: string,
@@ -189,6 +204,55 @@ export function useFormHandlers(params?: { selectedWorkspaceId?: string; selecte
     [kickMemberMutation],
   );
 
+  const onSendMessageWithAttachments = useCallback(
+    async (content: string, attachments: UploadedFile[]) => {
+      if (!selectedChannelId) return;
+      const draft = content.trim();
+      setMessageDraft("");
+      await withPending("sendMessage", () =>
+        (sendWithAttachmentsMutation as any)({
+          channelId: selectedChannelId as Id<"channels">,
+          content: draft,
+          attachments,
+        }),
+      );
+    },
+    [selectedChannelId, sendWithAttachmentsMutation, setMessageDraft],
+  );
+
+  const onEditMessage = useCallback(
+    async (messageId: string, content: string) => {
+      await withPending(`editMessage-${messageId}`, () =>
+        updateMessageMutation({
+          messageId: messageId as Id<"messages">,
+          content,
+        }),
+      );
+    },
+    [updateMessageMutation],
+  );
+
+  const onDeleteMessage = useCallback(
+    async (messageId: string) => {
+      await withPending(`deleteMessage-${messageId}`, () =>
+        removeMessageMutation({ messageId: messageId as Id<"messages"> }),
+      );
+    },
+    [removeMessageMutation],
+  );
+
+  const onToggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      await withPending(`reaction-${messageId}-${emoji}`, () =>
+        toggleReactionMutation({
+          messageId: messageId as Id<"messages">,
+          emoji,
+        }),
+      );
+    },
+    [toggleReactionMutation],
+  );
+
   return {
     // form state
     workspaceName,
@@ -213,5 +277,9 @@ export function useFormHandlers(params?: { selectedWorkspaceId?: string; selecte
     onUpdateSettings,
     onUpdateMemberRole,
     onKickMember,
+    onSendMessageWithAttachments,
+    onEditMessage,
+    onDeleteMessage,
+    onToggleReaction,
   };
 }

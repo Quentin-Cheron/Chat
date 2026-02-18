@@ -47,7 +47,7 @@ export const send = mutation({
     const authId = await requireAuth(ctx);
     await requireMember(ctx, channel.workspaceId);
 
-    const user = await ctx.db.get(authId as any);
+    const user = (await ctx.db.get(authId as any)) as { name?: string } | null;
 
     return ctx.db.insert("messages", {
       channelId,
@@ -85,7 +85,7 @@ export const sendWithAttachments = mutation({
     const authId = await requireAuth(ctx);
     await requireMember(ctx, channel.workspaceId);
 
-    const user = await ctx.db.get(authId as any);
+    const user = (await ctx.db.get(authId as any)) as { name?: string } | null;
 
     return ctx.db.insert("messages", {
       channelId,

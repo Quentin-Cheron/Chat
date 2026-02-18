@@ -1,5 +1,4 @@
 import { httpAction } from "./_generated/server";
-import { requireAuth } from "./_helpers";
 
 /**
  * POST /api/files/presign
@@ -10,10 +9,9 @@ import { requireAuth } from "./_helpers";
  * directly to MinIO without exposing credentials to the client.
  */
 export const presignUpload = httpAction(async (ctx, request) => {
-  // Auth check
-  try {
-    await requireAuth(ctx);
-  } catch {
+  // Auth check — httpAction ctx has auth but not db, so call getUserIdentity directly
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
     return new Response(JSON.stringify({ error: "Unauthenticated" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -64,13 +62,14 @@ export const presignUpload = httpAction(async (ctx, request) => {
     return jsonError("File type not allowed", 400);
   }
 
-  const minioInternalUrl =
-    process.env.MINIO_INTERNAL_URL ?? "http://minio:9000";
-  const minioPublicUrl =
-    process.env.MINIO_PUBLIC_URL ?? minioInternalUrl;
-  const bucket = process.env.MINIO_BUCKET ?? "chat-uploads";
-  const accessKey = process.env.MINIO_ROOT_USER ?? "minioadmin";
-  const secretKey = process.env.MINIO_ROOT_PASSWORD ?? "minioadmin123";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const env = (globalThis as any).process?.env ?? {};
+  const minioInternalUrl: string =
+    env.MINIO_INTERNAL_URL ?? "http://minio:9000";
+  const minioPublicUrl: string = env.MINIO_PUBLIC_URL ?? minioInternalUrl;
+  const bucket: string = env.MINIO_BUCKET ?? "chat-uploads";
+  const accessKey: string = env.MINIO_ROOT_USER ?? "minioadmin";
+  const secretKey: string = env.MINIO_ROOT_PASSWORD ?? "minioadmin123";
 
   // Build a unique storage key: timestamp + random + sanitised extension
   const ext = (fileName.split(".").pop() ?? "bin")
@@ -97,16 +96,13 @@ export const presignUpload = httpAction(async (ctx, request) => {
   // The public URL uses the Caddy-proxied /files path
   const publicUrl = `${minioPublicUrl}/${bucket}/${storageKey}`;
 
-  return new Response(
-    JSON.stringify({ uploadUrl, storageKey, publicUrl }),
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(),
-      },
+  return new Response(JSON.stringify({ uploadUrl, storageKey, publicUrl }), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      ...corsHeaders(),
     },
-  );
+  });
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -146,10 +142,7 @@ async function buildPresignedPutUrl(opts: {
   const now = new Date();
 
   // Format dates
-  const dateStamp = now
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, ""); // YYYYMMDD
+  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
   const amzDate =
     now
       .toISOString()
@@ -215,7 +208,7 @@ async function buildPresignedPutUrl(opts: {
   ): Promise<Uint8Array> => {
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      keyData,
+      keyData as ArrayBuffer,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"],
@@ -254,9 +247,7 @@ async function buildPresignedPutUrl(opts: {
     .join("");
 
   // Assemble final URL
-  const finalUrl = new URL(
-    `${endpoint}/${bucket}/${encodedKey}`,
-  );
+  const finalUrl = new URL(`${endpoint}/${bucket}/${encodedKey}`);
   for (const [k, v] of sortedParams.entries()) {
     finalUrl.searchParams.set(k, v);
   }

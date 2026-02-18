@@ -57,7 +57,11 @@ function AppPage() {
 
   // ── Helpers de navigation ────────────────────────────────────────────────
   function selectWorkspace(id: string) {
-    void navigate({ to: "/app", replace: true, search: { workspace: id } });
+    void navigate({
+      to: "/app",
+      replace: true,
+      search: { workspace: id, channel: undefined, voice: undefined },
+    });
   }
 
   function selectChannel(id: string) {
@@ -75,7 +79,9 @@ function AppPage() {
     api.workspaces.list,
     session?.user ? {} : "skip",
   );
-  const workspaces = workspacesQuery ?? [];
+  const workspaces = (workspacesQuery ?? []).filter(
+    (w): w is NonNullable<typeof w> => w !== null,
+  );
   const channels =
     useQuery(
       api.channels.list,
@@ -105,6 +111,16 @@ function AppPage() {
 
   const messages = messagesResult?.messages ?? [];
   const hasMoreMessages = messagesResult?.hasMore ?? false;
+
+  // ── Reactions ────────────────────────────────────────────────────────────
+  const reactions =
+    useQuery(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (api as any).reactions.listForChannel,
+      session?.user && selectedChannelId
+        ? { channelId: selectedChannelId as Id<"channels"> }
+        : "skip",
+    ) ?? {};
 
   async function handleLoadMore() {
     if (!messagesResult?.nextCursor || loadingMore) return;
@@ -152,7 +168,11 @@ function AppPage() {
     void navigate({
       to: "/app",
       replace: true,
-      search: { workspace: workspaces[0].workspaceId },
+      search: {
+        workspace: workspaces[0].workspaceId as string,
+        channel: undefined,
+        voice: undefined,
+      },
     });
   }, [workspaces, selectedWorkspaceId, navigate]);
 
@@ -166,8 +186,8 @@ function AppPage() {
       to: "/app",
       replace: true,
       search: (prev) => ({
-        ...prev,
-        channel: channels[0]._id,
+        workspace: prev.workspace,
+        channel: channels[0]._id as string,
         voice: undefined,
       }),
     });
@@ -299,6 +319,7 @@ function AppPage() {
         </p>
         <Link
           to="/login"
+          search={{ redirect: undefined }}
           className="rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white hover:bg-primary/90"
         >
           Go to login
@@ -478,10 +499,19 @@ function AppPage() {
           messageDraft={messageDraft}
           onMessageDraftChange={setMessageDraft}
           onSendMessage={formHandlers.onSendMessage}
+          onSendMessageWithAttachments={
+            formHandlers.onSendMessageWithAttachments
+          }
+          onEditMessage={formHandlers.onEditMessage}
+          onDeleteMessage={formHandlers.onDeleteMessage}
+          onToggleReaction={formHandlers.onToggleReaction}
           pendingMutations={formHandlers.pendingMutations}
           voiceChannelId={voiceChannel.voiceChannelId}
           voiceParticipants={voiceChannel.voiceParticipants}
           selectedChannelId={selectedChannelId}
+          currentUserId={session.user.id}
+          canModerate={canModerateRoles}
+          reactions={reactions}
           hasMoreMessages={hasMoreMessages}
           onLoadMoreMessages={handleLoadMore}
           loadingMoreMessages={loadingMore}
@@ -520,8 +550,8 @@ function AppPage() {
           micEnabled={voiceChannel.micEnabled}
           deafened={voiceChannel.deafened}
           loopbackTesting={voiceChannel.loopbackTesting}
-          diagnostics={[]}
-          showDiagPanel={false}
+          diagnostics={voiceChannel.diagnostics}
+          showDiagPanel={voiceChannel.showDiagPanel}
           voiceError={voiceChannel.voiceError}
           voiceJoining={voiceChannel.voiceJoining}
           onJoinVoice={voiceChannel.joinVoiceChannel}
@@ -533,7 +563,7 @@ function AppPage() {
           onSelectInputDevice={voiceChannel.onSelectInputDevice}
           onSelectOutputDevice={voiceChannel.onSelectOutputDevice}
           onToggleAudioProcessing={voiceChannel.onToggleAudioProcessing}
-          onSetShowDiagPanel={() => {}}
+          onSetShowDiagPanel={voiceChannel.setShowDiagPanel}
         />
       </div>
     </div>
