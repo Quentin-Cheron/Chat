@@ -258,20 +258,21 @@ setup_convex() {
       echo 'done'
     " || fail "Configuration des variables Convex échouée"
 
-  # Récupérer les JWKS depuis l'URL HTTP interne (pas de TLS, pas de réseau externe)
-  log "Récupération des JWKS depuis le réseau Docker interne..."
+  # Récupérer les JWKS via convex run (accès interne Convex, pas HTTP)
+  log "Récupération des JWKS..."
   NETWORK_NAME="$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)"
 
-  # Attendre que le endpoint JWKS soit disponible (Better Auth initialise les clés au démarrage)
-  for i in $(seq 1 20); do
-    JWKS_VAL="$(docker run --rm \
-      --network "$NETWORK_NAME" \
-      curlimages/curl:latest \
-      -fsS http://convex:3211/api/auth/.well-known/jwks 2>/dev/null)" && break
-    sleep 3
-  done
+  JWKS_VAL="$(docker run --rm \
+    --network "$NETWORK_NAME" \
+    -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
+    -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -v "$APP_DIR/web:/app" \
+    -w /app \
+    node:20-alpine \
+    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local && npx convex run betterAuth/auth:getLatestJwks --no-push" \
+    2>/dev/null)" || fail "Impossible de récupérer les JWKS"
 
-  [ -n "$JWKS_VAL" ] || fail "Impossible de récupérer les JWKS depuis http://convex:3211"
+  [ -n "$JWKS_VAL" ] || fail "JWKS vides — vérifiez que les fonctions sont bien déployées"
 
   log "Enregistrement des JWKS et redéploiement..."
   docker run --rm \

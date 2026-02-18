@@ -1,32 +1,13 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { createAuth } from "./betterAuth/auth";
+import { authComponent, createAuth } from "./betterAuth/auth";
 import { presignUpload } from "./files";
 
 const http = httpRouter();
 
-// ── Better Auth HTTP handler ──────────────────────────────────────────────────
-const authHandler = httpAction(async (ctx, request) => {
-  const auth = createAuth(ctx as any);
-  const response = await auth.handler(request);
-  return response;
-});
-
-http.route({
-  pathPrefix: "/api/auth/",
-  method: "GET",
-  handler: authHandler,
-});
-http.route({
-  pathPrefix: "/api/auth/",
-  method: "POST",
-  handler: authHandler,
-});
-http.route({
-  path: "/api/auth",
-  method: "GET",
-  handler: authHandler,
-});
+// Register all Better Auth routes via the official component method.
+// This handles /api/auth/*, Convex JWT token endpoints, CORS, and JWKS internally.
+authComponent.registerRoutes(http, createAuth, { cors: true });
 
 // ── File upload — pre-signed MinIO URL ────────────────────────────────────────
 http.route({
