@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { ShieldAlert } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -19,12 +19,7 @@ function SecurityChangePasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const passwordStatus = useQuery(
-    api.users.getPasswordStatus,
-    session?.user ? {} : "skip",
-  );
   const changePasswordMut = useMutation(api.users.changePassword);
-  const clearMustChange = useMutation(api.users.clearMustChangePassword);
 
   useEffect(() => {
     if (sessionPending) return;
@@ -33,12 +28,8 @@ function SecurityChangePasswordPage() {
         to: "/login",
         search: { redirect: "/security/change-password" },
       });
-      return;
     }
-    if (passwordStatus && !passwordStatus.mustChangePassword) {
-      void navigate({ to: "/app" });
-    }
-  }, [navigate, session?.user, sessionPending, passwordStatus]);
+  }, [navigate, session?.user, sessionPending]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,7 +45,6 @@ function SecurityChangePasswordPage() {
     setPending(true);
     try {
       await changePasswordMut({ currentPassword, newPassword });
-      await clearMustChange({});
       await navigate({ to: "/app" });
     } catch (e) {
       setError(
@@ -65,7 +55,7 @@ function SecurityChangePasswordPage() {
     }
   }
 
-  if (sessionPending || passwordStatus === undefined) {
+  if (sessionPending) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -86,24 +76,18 @@ function SecurityChangePasswordPage() {
             Sécurité du compte
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pour terminer l'installation, vous devez remplacer le mot de passe
-            initial.
+            Changez votre mot de passe pour sécuriser votre compte.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-amber-500/20 bg-card p-8 shadow-xl shadow-black/40">
-          <div className="mb-5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
-            Action requise · Votre mot de passe temporaire doit être changé
-            avant de continuer.
-          </div>
-
+        <div className="rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/40">
           <form className="grid gap-5" onSubmit={onSubmit}>
             <div className="grid gap-2">
               <label
                 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
                 htmlFor="current-password"
               >
-                Mot de passe temporaire
+                Mot de passe actuel
               </label>
               <Input
                 id="current-password"
@@ -111,7 +95,7 @@ function SecurityChangePasswordPage() {
                 required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-amber-500/50 focus:outline-none"
+                className="border-border bg-input text-foreground placeholder:text-muted-foreground/50 focus:border-primary/50 focus:outline-none"
                 placeholder="••••••••••"
               />
             </div>

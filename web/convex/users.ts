@@ -42,22 +42,3 @@ export const updateUser = mutation({
     });
   },
 });
-
-// Vérifie si l'utilisateur doit changer son mot de passe
-// Better Auth ne gère pas mustChangePassword nativement — retourne toujours false
-export const getPasswordStatus = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await authComponent.getAuthUser(ctx);
-    if (!user) return { mustChangePassword: false };
-    return { mustChangePassword: false };
-  },
-});
-
-// No-op : mustChangePassword n'est plus stocké dans une table custom
-export const clearMustChangePassword = mutation({
-  args: {},
-  handler: async (_ctx) => {
-    // no-op
-  },
-});

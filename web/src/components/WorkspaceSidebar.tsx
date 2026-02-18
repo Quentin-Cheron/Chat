@@ -1,5 +1,6 @@
-import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { THEMES, useTheme } from "@/hooks/useTheme";
+import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { Palette, Plus, Settings, X } from "lucide-react";
 import type { FormEvent } from "react";
@@ -12,7 +13,7 @@ type WorkspaceItem = {
 };
 
 type Props = {
-  workspaces: WorkspaceItem[];
+  workspaces: WorkspaceItem[] | undefined;
   selectedWorkspaceId: string;
   onSelectWorkspace: (id: string) => void;
   onCreateWorkspace: (e: FormEvent) => void;
@@ -22,7 +23,16 @@ type Props = {
   mutationError: string;
 };
 
-export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWorkspace, onCreateWorkspace, workspaceName, setWorkspaceName, pendingMutations, mutationError }: Props) {
+export function WorkspaceSidebar({
+  workspaces,
+  selectedWorkspaceId,
+  onSelectWorkspace,
+  onCreateWorkspace,
+  workspaceName,
+  setWorkspaceName,
+  pendingMutations,
+  mutationError,
+}: Props) {
   const { theme, setTheme } = useTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -42,35 +52,48 @@ export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWork
 
   return (
     <aside className="hidden w-[72px] shrink-0 flex-col items-center gap-1.5 border-r border-border bg-card py-3 md:flex">
-      {workspaces.map((ws) => {
-        const initial = ws.name.charAt(0).toUpperCase();
-        const isSelected = ws.workspaceId === selectedWorkspaceId;
-        return (
-          <div key={ws.workspaceId} className="relative flex w-full items-center justify-center">
-            <span
-              className={cn(
-                "absolute left-0 h-5 w-1 rounded-r-full bg-primary transition-all duration-200",
-                isSelected ? "opacity-100 scale-y-100" : "opacity-0 scale-y-0",
-              )}
-            />
-            <button
-              type="button"
-              title={ws.name}
-              onClick={() => onSelectWorkspace(ws.workspaceId)}
-              className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold transition-all duration-200",
-                isSelected
-                  ? "rounded-xl bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:rounded-xl hover:bg-primary/20 hover:text-primary",
-              )}
+      {workspaces === undefined ? (
+        <>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-11 w-11 rounded-2xl" />
+          ))}
+        </>
+      ) : (
+        workspaces.map((ws) => {
+          const initial = ws.name.charAt(0).toUpperCase();
+          const isSelected = ws.workspaceId === selectedWorkspaceId;
+          return (
+            <div
+              key={ws.workspaceId}
+              className="relative flex w-full items-center justify-center"
             >
-              {initial}
-            </button>
-          </div>
-        );
-      })}
+              <span
+                className={cn(
+                  "absolute left-0 h-5 w-1 rounded-r-full bg-primary transition-all duration-200",
+                  isSelected
+                    ? "opacity-100 scale-y-100"
+                    : "opacity-0 scale-y-0",
+                )}
+              />
+              <button
+                type="button"
+                title={ws.name}
+                onClick={() => onSelectWorkspace(ws.workspaceId)}
+                className={cn(
+                  "flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold transition-all duration-200",
+                  isSelected
+                    ? "rounded-xl bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:rounded-xl hover:bg-primary/20 hover:text-primary",
+                )}
+              >
+                {initial}
+              </button>
+            </div>
+          );
+        })
+      )}
 
-      {workspaces.length > 0 && (
+      {workspaces !== undefined && workspaces.length > 0 && (
         <div className="my-1 h-px w-8 bg-border" />
       )}
       <div className="relative flex w-full items-center justify-center">
@@ -93,7 +116,9 @@ export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWork
           />
           <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-foreground">Nouveau workspace</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                Nouveau workspace
+              </h2>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
@@ -104,7 +129,9 @@ export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWork
             </div>
             <form onSubmit={handleCreate} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nom du workspace</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Nom du workspace
+                </label>
                 <input
                   ref={inputRef}
                   value={workspaceName}
@@ -126,10 +153,15 @@ export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWork
                 </button>
                 <button
                   type="submit"
-                  disabled={!workspaceName.trim() || pendingMutations.has("createWorkspace")}
+                  disabled={
+                    !workspaceName.trim() ||
+                    pendingMutations.has("createWorkspace")
+                  }
                   className="h-9 flex-1 rounded-lg bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {pendingMutations.has("createWorkspace") ? "Création..." : "Créer"}
+                  {pendingMutations.has("createWorkspace")
+                    ? "Création..."
+                    : "Créer"}
                 </button>
               </div>
             </form>
@@ -187,7 +219,10 @@ export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWork
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => { setTheme(t.id); setShowThemePicker(false); }}
+                      onClick={() => {
+                        setTheme(t.id);
+                        setShowThemePicker(false);
+                      }}
                       className={cn(
                         "relative flex flex-col items-start gap-1.5 rounded-lg border p-2 transition-all",
                         isActive
@@ -205,10 +240,12 @@ export function WorkspaceSidebar({ workspaces, selectedWorkspaceId, onSelectWork
                           style={{ background: t.primary }}
                         />
                       </div>
-                      <span className={cn(
-                        "text-[11px] font-medium",
-                        isActive ? "text-primary" : "text-muted-foreground",
-                      )}>
+                      <span
+                        className={cn(
+                          "text-[11px] font-medium",
+                          isActive ? "text-primary" : "text-muted-foreground",
+                        )}
+                      >
                         {t.label}
                       </span>
                       {isActive && (

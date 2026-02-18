@@ -44,14 +44,16 @@ function AppPage() {
   const setMessageDraft = useAppStore((s) => s.setMessageDraft);
 
   const [showMobileNav, setShowMobileNav] = useState(false);
-  const [selectedDmUserId, setSelectedDmUserId] = useState("");
 
   // ── IDs depuis l'URL (source de vérité) ─────────────────────────────────
   const selectedWorkspaceId = search.workspace ?? "";
   const selectedChannelId = search.channel ?? "";
 
   const socketRef = useRef<Socket | null>(null);
-  const formHandlers = useFormHandlers({ selectedWorkspaceId, selectedChannelId });
+  const formHandlers = useFormHandlers({
+    selectedWorkspaceId,
+    selectedChannelId,
+  });
 
   // ── Helpers de navigation ────────────────────────────────────────────────
   function selectWorkspace(id: string) {
@@ -59,30 +61,70 @@ function AppPage() {
   }
 
   function selectChannel(id: string) {
-    void navigate({ to: "/app", replace: true, search: (prev) => ({ ...prev, channel: id, voice: undefined }) });
+    void navigate({
+      to: "/app",
+      replace: true,
+      search: (prev) => ({ ...prev, channel: id, voice: undefined }),
+    });
   }
 
   const voiceChannel = useVoiceChannel(socketRef, session);
 
   // ── Convex queries ──────────────────────────────────────────────────────
-  const passwordStatus = useQuery(api.users.getPasswordStatus, session?.user ? {} : "skip");
-  const workspacesQuery = useQuery(api.workspaces.list, session?.user ? {} : "skip");
+  const workspacesQuery = useQuery(
+    api.workspaces.list,
+    session?.user ? {} : "skip",
+  );
   const workspaces = workspacesQuery ?? [];
-  const channels = useQuery(
-    api.channels.list,
-    session?.user && selectedWorkspaceId ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> } : "skip",
-  ) ?? [];
-  const messages = useQuery(
+  const channels =
+    useQuery(
+      api.channels.list,
+      session?.user && selectedWorkspaceId
+        ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> }
+        : "skip",
+    ) ?? [];
+
+  // ── Paginated messages ───────────────────────────────────────────────────
+  const [messageCursor, setMessageCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const messagesResult = useQuery(
     api.messages.list,
-    session?.user && selectedChannelId ? { channelId: selectedChannelId as Id<"channels"> } : "skip",
-  ) ?? [];
-  const members = useQuery(
-    api.members.list,
-    session?.user && selectedWorkspaceId ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> } : "skip",
-  ) ?? [];
+    session?.user && selectedChannelId
+      ? {
+          channelId: selectedChannelId as Id<"channels">,
+          cursor: messageCursor ?? undefined,
+        }
+      : "skip",
+  );
+
+  // Reset cursor when channel changes
+  useEffect(() => {
+    setMessageCursor(null);
+  }, [selectedChannelId]);
+
+  const messages = messagesResult?.messages ?? [];
+  const hasMoreMessages = messagesResult?.hasMore ?? false;
+
+  async function handleLoadMore() {
+    if (!messagesResult?.nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setMessageCursor(messagesResult.nextCursor);
+    setLoadingMore(false);
+  }
+
+  const members =
+    useQuery(
+      api.members.list,
+      session?.user && selectedWorkspaceId
+        ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> }
+        : "skip",
+    ) ?? [];
   const workspaceSettings = useQuery(
     api.workspaces.getSettings,
-    session?.user && selectedWorkspaceId ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> } : "skip",
+    session?.user && selectedWorkspaceId
+      ? { workspaceId: selectedWorkspaceId as Id<"workspaces"> }
+      : "skip",
   );
 
   // ── Derived state ───────────────────────────────────────────────────────
@@ -94,14 +136,6 @@ function AppPage() {
     () => channels.find((c) => c._id === selectedChannelId) ?? null,
     [channels, selectedChannelId],
   );
-  const dmMembers = useMemo(
-    () => members.filter((m) => m.userId !== session?.user?.id),
-    [members, session?.user?.id],
-  );
-  const selectedDmMember = useMemo(
-    () => dmMembers.find((m) => m.userId === selectedDmUserId) ?? null,
-    [dmMembers, selectedDmUserId],
-  );
   const canModerateRoles =
     selectedWorkspaceMembership?.role === "OWNER" ||
     selectedWorkspaceMembership?.role === "ADMIN";
@@ -109,60 +143,112 @@ function AppPage() {
   // ── Auto-select workspace si absent de l'URL ─────────────────────────────
   useEffect(() => {
     if (!workspaces.length) return;
-    if (selectedWorkspaceId && workspaces.some((w) => w.workspaceId === selectedWorkspaceId)) return;
+    if (
+      selectedWorkspaceId &&
+      workspaces.some((w) => w.workspaceId === selectedWorkspaceId)
+    )
+      return;
     // Pas de workspace valide dans l'URL → prendre le premier
-    void navigate({ to: "/app", replace: true, search: { workspace: workspaces[0].workspaceId } });
+    void navigate({
+      to: "/app",
+      replace: true,
+      search: { workspace: workspaces[0].workspaceId },
+    });
   }, [workspaces, selectedWorkspaceId, navigate]);
 
   // ── Auto-select channel si absent de l'URL ───────────────────────────────
   useEffect(() => {
     if (!channels.length) return;
-    if (selectedChannelId && channels.some((c) => c._id === selectedChannelId)) return;
+    if (selectedChannelId && channels.some((c) => c._id === selectedChannelId))
+      return;
     // Pas de channel valide dans l'URL → prendre le premier
-    void navigate({ to: "/app", replace: true, search: (prev) => ({ ...prev, channel: channels[0]._id, voice: undefined }) });
+    void navigate({
+      to: "/app",
+      replace: true,
+      search: (prev) => ({
+        ...prev,
+        channel: channels[0]._id,
+        voice: undefined,
+      }),
+    });
   }, [channels, selectedChannelId, navigate]);
-
-  // ── mustChangePassword redirect ──────────────────────────────────────────
-  useEffect(() => {
-    if (session?.user && passwordStatus?.mustChangePassword) {
-      void navigate({ to: "/security/change-password" });
-    }
-  }, [navigate, session?.user, passwordStatus?.mustChangePassword]);
 
   // ── Leave voice if channel deleted ───────────────────────────────────────
   useEffect(() => {
     if (!voiceChannel.voiceChannelId || !channels.length) return;
-    if (!channels.some((c) => c._id === voiceChannel.voiceChannelId)) void voiceChannel.leaveVoiceChannel();
+    if (!channels.some((c) => c._id === voiceChannel.voiceChannelId))
+      void voiceChannel.leaveVoiceChannel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channels]);
 
   // ── Socket.io ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!session?.user || socketRef.current) return;
-    const socket: Socket = io("/ws", { withCredentials: true, transports: ["websocket"], path: "/socket.io" });
+    const socket: Socket = io("/ws", {
+      withCredentials: true,
+      transports: ["websocket"],
+      path: "/socket.io",
+    });
     socketRef.current = socket;
-    socket.on("voice-presence", (payload: { channelId: string; participants: Array<{ peerId: string; name?: string; email?: string; speaking?: boolean }> }) => {
-      if (!payload?.channelId || !Array.isArray(payload.participants)) return;
-    });
-    socket.on("voice-new-producer", async (payload: { channelId: string; producerId: string; peerId: string }) => {
-      if (!payload?.channelId || payload.channelId !== voiceChannel.voiceChannelId) return;
-    });
+    socket.on(
+      "voice-presence",
+      (payload: {
+        channelId: string;
+        participants: Array<{
+          peerId: string;
+          name?: string;
+          email?: string;
+          speaking?: boolean;
+        }>;
+      }) => {
+        if (!payload?.channelId || !Array.isArray(payload.participants)) return;
+      },
+    );
+    socket.on(
+      "voice-new-producer",
+      async (payload: {
+        channelId: string;
+        producerId: string;
+        peerId: string;
+      }) => {
+        if (
+          !payload?.channelId ||
+          payload.channelId !== voiceChannel.voiceChannelId
+        )
+          return;
+      },
+    );
     socket.on("voice-peer-left", (_payload: { peerId: string }) => {});
-    socket.on("voice-speaking", (_payload: { peerId: string; speaking: boolean }) => {});
-    return () => { socket.off("voice-new-producer"); socket.off("voice-presence"); socket.disconnect(); socketRef.current = null; };
+    socket.on(
+      "voice-speaking",
+      (_payload: { peerId: string; speaking: boolean }) => {},
+    );
+    return () => {
+      socket.off("voice-new-producer");
+      socket.off("voice-presence");
+      socket.disconnect();
+      socketRef.current = null;
+    };
   }, [session?.user, voiceChannel.voiceChannelId]);
 
   useEffect(() => {
     if (!socketRef.current || !selectedChannelId) return;
     socketRef.current.emit("join-channel", { channelId: selectedChannelId });
-    return () => { socketRef.current?.emit("leave-channel", { channelId: selectedChannelId }); };
+    return () => {
+      socketRef.current?.emit("leave-channel", {
+        channelId: selectedChannelId,
+      });
+    };
   }, [selectedChannelId]);
 
   // ── Auto-join voice from URL ─────────────────────────────────────────────
   useEffect(() => {
     if (!session?.user || !search.voice || !socketRef.current) return;
-    if (voiceChannel.voiceChannelId === search.voice || !channels.length) return;
-    const target = channels.find((c) => c._id === search.voice && c.type === "VOICE");
+    if (voiceChannel.voiceChannelId === search.voice || !channels.length)
+      return;
+    const target = channels.find(
+      (c) => c._id === search.voice && c.type === "VOICE",
+    );
     if (!target) return;
     void voiceChannel.joinVoiceChannel(target._id);
   }, [channels, search.voice, session?.user, voiceChannel]);
@@ -171,13 +257,21 @@ function AppPage() {
   useEffect(() => {
     void voiceChannel.refreshDevices();
     if (!navigator.mediaDevices) return;
-    const onDeviceChange = () => { void voiceChannel.refreshDevices(); };
+    const onDeviceChange = () => {
+      void voiceChannel.refreshDevices();
+    };
     navigator.mediaDevices.addEventListener("devicechange", onDeviceChange);
-    return () => navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
+    return () =>
+      navigator.mediaDevices.removeEventListener(
+        "devicechange",
+        onDeviceChange,
+      );
   }, [voiceChannel]);
 
   useEffect(() => {
-    return () => { void voiceChannel.leaveVoiceChannel(); };
+    return () => {
+      void voiceChannel.leaveVoiceChannel();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -200,8 +294,13 @@ function AppPage() {
           <MessageSquareMore className="h-6 w-6 text-white" />
         </div>
         <h2 className="text-xl font-bold text-foreground">Sign in required</h2>
-        <p className="text-sm text-muted-foreground">You need to be signed in to access this page.</p>
-        <Link to="/login" className="rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white hover:bg-primary/90">
+        <p className="text-sm text-muted-foreground">
+          You need to be signed in to access this page.
+        </p>
+        <Link
+          to="/login"
+          className="rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+        >
           Go to login
         </Link>
       </div>
@@ -226,21 +325,33 @@ function AppPage() {
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary">
             <MessageSquareMore className="h-6 w-6 text-white" />
           </div>
-          <h3 className="text-xl font-bold text-foreground">Create your first workspace</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Start by creating a workspace, then invite your team.</p>
-          <form className="mt-6 flex gap-2" onSubmit={formHandlers.onCreateWorkspace}>
+          <h3 className="text-xl font-bold text-foreground">
+            Create your first workspace
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Start by creating a workspace, then invite your team.
+          </p>
+          <form
+            className="mt-6 flex gap-2"
+            onSubmit={formHandlers.onCreateWorkspace}
+          >
             <input
               value={formHandlers.workspaceName}
               onChange={(e) => formHandlers.setWorkspaceName(e.target.value)}
               placeholder="Workspace name"
               className="h-10 flex-1 rounded-lg border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
             />
-            <button type="submit" className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary/90">
+            <button
+              type="submit"
+              className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary/90"
+            >
               Create
             </button>
           </form>
           <div className="mt-4">
-            <p className="mb-2 text-xs text-muted-foreground">Or join with an invite code:</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Or join with an invite code:
+            </p>
             <form className="flex gap-2" onSubmit={formHandlers.onJoinInvite}>
               <input
                 value={formHandlers.inviteCode}
@@ -248,13 +359,18 @@ function AppPage() {
                 placeholder="Invite code"
                 className="h-10 flex-1 rounded-lg border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
               />
-              <button type="submit" className="h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground hover:text-foreground">
+              <button
+                type="submit"
+                className="h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground hover:text-foreground"
+              >
                 Join
               </button>
             </form>
           </div>
           {formHandlers.mutationError && (
-            <p className="mt-3 text-xs text-red-400">{formHandlers.mutationError}</p>
+            <p className="mt-3 text-xs text-red-400">
+              {formHandlers.mutationError}
+            </p>
           )}
         </div>
       </div>
@@ -265,15 +381,23 @@ function AppPage() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {showMobileNav && (
-        <div className="fixed inset-0 z-20 bg-black/60 md:hidden" onClick={() => setShowMobileNav(false)} />
+        <div
+          className="fixed inset-0 z-20 bg-black/60 md:hidden"
+          onClick={() => setShowMobileNav(false)}
+        />
       )}
 
       {/* Mobile nav drawer */}
-      <div className={`fixed inset-y-0 left-0 z-30 flex transition-transform duration-200 md:hidden ${showMobileNav ? "translate-x-0" : "-translate-x-full"}`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-30 flex transition-transform duration-200 md:hidden ${showMobileNav ? "translate-x-0" : "-translate-x-full"}`}
+      >
         <WorkspaceSidebar
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
-          onSelectWorkspace={(id) => { selectWorkspace(id); setShowMobileNav(false); }}
+          onSelectWorkspace={(id) => {
+            selectWorkspace(id);
+            setShowMobileNav(false);
+          }}
           onCreateWorkspace={formHandlers.onCreateWorkspace}
           workspaceName={formHandlers.workspaceName}
           setWorkspaceName={formHandlers.setWorkspaceName}
@@ -293,7 +417,10 @@ function AppPage() {
           onCreateChannel={formHandlers.onCreateChannel}
           onRemoveChannel={formHandlers.onRemoveChannel}
           showMobileNav={true}
-          onSelectChannel={(id) => { selectChannel(id); setShowMobileNav(false); }}
+          onSelectChannel={(id) => {
+            selectChannel(id);
+            setShowMobileNav(false);
+          }}
         />
       </div>
 
@@ -333,7 +460,11 @@ function AppPage() {
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => setShowMobileNav((p) => !p)}
           >
-            {showMobileNav ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {showMobileNav ? (
+              <X className="h-4 w-4" />
+            ) : (
+              <Menu className="h-4 w-4" />
+            )}
           </button>
           <span className="text-sm font-semibold text-foreground">
             {selectedChannel?.name ?? "Select a channel"}
@@ -341,7 +472,7 @@ function AppPage() {
         </div>
 
         <MessagePanel
-          selectedDmMember={selectedDmMember}
+          selectedDmMember={null}
           selectedChannel={selectedChannel}
           messages={messages}
           messageDraft={messageDraft}
@@ -351,6 +482,9 @@ function AppPage() {
           voiceChannelId={voiceChannel.voiceChannelId}
           voiceParticipants={voiceChannel.voiceParticipants}
           selectedChannelId={selectedChannelId}
+          hasMoreMessages={hasMoreMessages}
+          onLoadMoreMessages={handleLoadMore}
+          loadingMoreMessages={loadingMore}
         />
       </div>
 
