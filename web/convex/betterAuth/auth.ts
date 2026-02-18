@@ -33,7 +33,10 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     },
     plugins: [
       crossDomain({ siteUrl }),
-      convex({ authConfig, jwks: process.env.JWKS }),
+      convex({
+        authConfig,
+        ...(process.env.JWKS ? { jwks: process.env.JWKS } : {}),
+      }),
     ],
   } satisfies BetterAuthOptions;
 };
