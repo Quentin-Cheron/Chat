@@ -42,6 +42,9 @@ ask_inputs() {
   MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-}"
   MEDIASOUP_MIN_PORT="${MEDIASOUP_MIN_PORT:-40000}"
   MEDIASOUP_MAX_PORT="${MEDIASOUP_MAX_PORT:-40100}"
+  MINIO_ROOT_USER="${MINIO_ROOT_USER:-}"
+  MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
+  MINIO_BUCKET="${MINIO_BUCKET:-chat-uploads}"
 
   # Résolution automatique du domaine si non fourni
   if [ -z "$DOMAIN" ]; then
@@ -66,6 +69,10 @@ ask_inputs() {
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 20)}"
   INSTANCE_PUBLIC_URL="${INSTANCE_PUBLIC_URL:-https://$DOMAIN}"
   MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-$DOMAIN}"
+  MINIO_ROOT_USER="${MINIO_ROOT_USER:-minio}"
+  MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 24)}"
+  MINIO_BUCKET="${MINIO_BUCKET:-chat-uploads}"
+  MINIO_PUBLIC_URL="https://$DOMAIN/files"
 }
 
 install_base_packages() {
@@ -173,6 +180,13 @@ VITE_TURN_PASSWORD=$VITE_TURN_PASSWORD
 MEDIASOUP_ANNOUNCED_IP=$MEDIASOUP_ANNOUNCED_IP
 MEDIASOUP_MIN_PORT=$MEDIASOUP_MIN_PORT
 MEDIASOUP_MAX_PORT=$MEDIASOUP_MAX_PORT
+
+# MinIO (object storage)
+MINIO_ROOT_USER=$MINIO_ROOT_USER
+MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
+MINIO_BUCKET=$MINIO_BUCKET
+MINIO_PUBLIC_URL=$MINIO_PUBLIC_URL
+MINIO_INTERNAL_URL=http://minio:9000
 ENV
 }
 
@@ -219,6 +233,10 @@ setup_convex() {
   SITE_URL_VAL="$(grep ^SITE_URL "$ENV_FILE" | cut -d= -f2)"
   RESOLVER_TOKEN="$(grep ^RESOLVER_REGISTER_TOKEN "$ENV_FILE" | cut -d= -f2)"
   DOMAIN_VAL="$(grep ^DOMAIN "$ENV_FILE" | cut -d= -f2)"
+  MINIO_ROOT_USER_VAL="$(grep ^MINIO_ROOT_USER "$ENV_FILE" | cut -d= -f2)"
+  MINIO_ROOT_PASSWORD_VAL="$(grep ^MINIO_ROOT_PASSWORD "$ENV_FILE" | cut -d= -f2)"
+  MINIO_BUCKET_VAL="$(grep ^MINIO_BUCKET "$ENV_FILE" | cut -d= -f2)"
+  MINIO_PUBLIC_URL_VAL="$(grep ^MINIO_PUBLIC_URL "$ENV_FILE" | cut -d= -f2)"
 
   docker run --rm \
     --network "$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)" \
@@ -232,7 +250,12 @@ setup_convex() {
       npx convex env set BETTER_AUTH_SECRET '$BETTER_AUTH_SECRET' &&
       npx convex env set BETTER_AUTH_URL 'https://$DOMAIN_VAL' &&
       npx convex env set SITE_URL '$SITE_URL_VAL' &&
-      echo "done"
+      npx convex env set MINIO_INTERNAL_URL 'http://minio:9000' &&
+      npx convex env set MINIO_PUBLIC_URL '$MINIO_PUBLIC_URL_VAL' &&
+      npx convex env set MINIO_BUCKET '$MINIO_BUCKET_VAL' &&
+      npx convex env set MINIO_ROOT_USER '$MINIO_ROOT_USER_VAL' &&
+      npx convex env set MINIO_ROOT_PASSWORD '$MINIO_ROOT_PASSWORD_VAL' &&
+      echo 'done'
     " || fail "Configuration des variables Convex échouée"
 
   log "Convex configuré avec succès"
@@ -255,6 +278,12 @@ Mot de passe temporaire admin: $ADMIN_PASSWORD
 Invitation (MVP): https://$DOMAIN/invite/<code>
 Role: $INSTALL_ROLE
 Action requise: connectez-vous puis changez le mot de passe sur /security/change-password
+
+MinIO (object storage):
+  URL publique : $MINIO_PUBLIC_URL
+  Bucket       : $MINIO_BUCKET
+  Utilisateur  : $MINIO_ROOT_USER
+  Mot de passe : $MINIO_ROOT_PASSWORD
 
 Commandes utiles:
   cd $APP_DIR
