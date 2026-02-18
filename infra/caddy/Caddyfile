@@ -24,6 +24,16 @@
     }
   }
 
+  # File upload HTTP actions (presign) → convex:3211
+  @files path /api/files/*
+  handle @files {
+    reverse_proxy convex:3211 {
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
+    }
+  }
+
   # Convex backend (queries, mutations, WS) → 3210
   @convex path /convex/*
   handle @convex {
