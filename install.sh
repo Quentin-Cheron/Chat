@@ -258,6 +258,32 @@ setup_convex() {
       echo 'done'
     " || fail "Configuration des variables Convex échouée"
 
+  # Récupérer les JWKS et redéployer avec JWKS statiques
+  log "Récupération des JWKS pour validation statique..."
+  JWKS_VAL="$(docker run --rm \
+    --network "$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)" \
+    -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
+    -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -v "$APP_DIR/web:/app" \
+    -w /app \
+    node:20-alpine \
+    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local && npx convex run betterAuth/auth:getLatestJwks" \
+    2>/dev/null)" || fail "Impossible de récupérer les JWKS"
+
+  log "Enregistrement des JWKS et redéploiement..."
+  docker run --rm \
+    --network "$(docker network ls --filter name=privatechat --format '{{.Name}}' | head -1)" \
+    -e CONVEX_SELF_HOSTED_URL=http://convex:3210 \
+    -e CONVEX_SELF_HOSTED_ADMIN_KEY="$CONVEX_ADMIN_KEY" \
+    -v "$APP_DIR/web:/app" \
+    -w /app \
+    node:20-alpine \
+    sh -c "
+      npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local &&
+      npx convex env set JWKS '$JWKS_VAL' &&
+      npx convex deploy --yes
+    " || fail "Redéploiement Convex avec JWKS statiques échoué"
+
   log "Convex configuré avec succès"
 }
 

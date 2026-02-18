@@ -5,6 +5,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { betterAuth } from "better-auth";
 import { components } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
+import { internalAction } from "../_generated/server";
 import authConfig from "../auth.config";
 import schema from "./schema";
 
@@ -32,7 +33,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     },
     plugins: [
       crossDomain({ siteUrl }),
-      convex({ authConfig, jwksRotateOnTokenGenerationError: true }),
+      convex({ authConfig, jwks: process.env.JWKS }),
     ],
   } satisfies BetterAuthOptions;
 };
@@ -44,3 +45,13 @@ export const options = createAuthOptions({} as GenericCtx<DataModel>);
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth(createAuthOptions(ctx));
 };
+
+// Action interne pour récupérer les JWKS courants (utilisé lors de l'install)
+export const getLatestJwks = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const auth = createAuth(ctx as unknown as GenericCtx<DataModel>);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return await (auth.api as any).getLatestJwks();
+  },
+});
