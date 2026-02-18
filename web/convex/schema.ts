@@ -48,9 +48,7 @@ export default defineSchema({
         }),
       ),
     ),
-  })
-    .index("by_channel", ["channelId"])
-    .index("by_channel_time", ["channelId"]),
+  }).index("by_channel", ["channelId"]),
 
   reactions: defineTable({
     messageId: v.id("messages"),
