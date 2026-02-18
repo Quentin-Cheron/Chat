@@ -5,7 +5,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { betterAuth } from "better-auth";
 import { components } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
-import { internalAction } from "../_generated/server";
+import { action } from "../_generated/server";
 import authConfig from "../auth.config";
 import schema from "./schema";
 
@@ -46,8 +46,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth(createAuthOptions(ctx));
 };
 
-// Action interne pour récupérer les JWKS courants (utilisé lors de l'install)
-export const getLatestJwks = internalAction({
+// Action publique pour récupérer les JWKS courants (utilisé lors de l'install via CLI)
+export const getLatestJwks = action({
   args: {},
   handler: async (ctx) => {
     const auth = createAuth(ctx as unknown as GenericCtx<DataModel>);
