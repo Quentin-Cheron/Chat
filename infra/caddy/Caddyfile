@@ -59,6 +59,17 @@
     }
   }
 
+  # MinIO object storage (file uploads / downloads)
+  @minio path /files/*
+  handle @minio {
+    uri strip_prefix /files
+    reverse_proxy minio:9000 {
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote}
+    }
+  }
+
   # Frontend
   reverse_proxy web:80 {
     header_up Host {host}

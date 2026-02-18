@@ -7,14 +7,16 @@ services:
       - "3210:3210"
       - "3211:3211"
     environment:
-      # URL interne au réseau Docker (utilisée par le backend Convex lui-même)
       - CONVEX_CLOUD_ORIGIN=http://convex:3210
-      # URL publique du site Convex (pour les HTTP actions / Better Auth) — sans path
       - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN}
-      # Clé admin pour les déploiements self-hosted
       - CONVEX_ADMIN_KEY=insecure-0000000000000000000000000000000000000000000000000000000000000001
-      # Activation des HTTP actions pour Better Auth
       - CONVEX_ENABLE_HTTP_ACTIONS=true
+      # MinIO credentials passed to Convex HTTP actions
+      - MINIO_INTERNAL_URL=http://minio:9000
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000}
+      - MINIO_BUCKET=${MINIO_BUCKET:-chat-uploads}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
     volumes:
       - convex_data:/convex/data
     healthcheck:
@@ -26,6 +28,45 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: privatechat-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    expose:
+      - "9000"
+      - "9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: privatechat-minio-init
+    restart: on-failure
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - MINIO_BUCKET=${MINIO_BUCKET:-chat-uploads}
+    entrypoint: >
+      sh -c "
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb --ignore-existing local/$$MINIO_BUCKET &&
+        mc anonymous set download local/$$MINIO_BUCKET &&
+        echo 'MinIO bucket ready.'
+      "
 
   caddy:
     image: caddy:2.8
@@ -47,6 +88,7 @@ services:
       - web
       - api
       - convex
+      - minio
 
   web:
     build:
@@ -56,9 +98,7 @@ services:
         - VITE_TURN_URL=${VITE_TURN_URL}
         - VITE_TURN_USERNAME=${VITE_TURN_USERNAME}
         - VITE_TURN_PASSWORD=${VITE_TURN_PASSWORD}
-        # URL Convex cloud (WebSocket/HTTP pour les queries/mutations)
         - VITE_CONVEX_URL=${VITE_CONVEX_URL}
-        # URL Convex site (HTTP actions, Better Auth)
         - VITE_CONVEX_SITE_URL=${VITE_CONVEX_SITE_URL}
     image: privatechat-web:local
     container_name: privatechat-web
@@ -102,6 +142,7 @@ services:
 
 volumes:
   convex_data:
+  minio_data:
   caddy_data:
   caddy_config:
   cargo_cache:
