@@ -269,8 +269,12 @@ setup_convex() {
     -v "$APP_DIR/web:/app" \
     -w /app \
     node:20-alpine \
-    sh -c "npm install -g pnpm && pnpm install --no-frozen-lockfile && rm -f .env.local && npx convex run betterAuth/auth:getLatestJwks --no-push" \
-    2>/dev/null)" || fail "Impossible de récupérer les JWKS"
+    sh -c '
+      npm install -g pnpm >/dev/null 2>&1
+      pnpm install --no-frozen-lockfile >/dev/null 2>&1
+      rm -f .env.local
+      npx convex run betterAuth/auth:getLatestJwks
+    ' 2>/dev/null)" || fail "Impossible de récupérer les JWKS"
 
   [ -n "$JWKS_VAL" ] || fail "JWKS vides — vérifiez que les fonctions sont bien déployées"
 
