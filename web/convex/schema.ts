@@ -50,7 +50,7 @@ export default defineSchema({
     ),
   })
     .index("by_channel", ["channelId"])
-    .index("by_channel_time", ["channelId", "_creationTime"]),
+    .index("by_channel_time", ["channelId"]),
 
   reactions: defineTable({
     messageId: v.id("messages"),
