@@ -276,7 +276,6 @@ URL: https://$DOMAIN
 Admin: $ADMIN_EMAIL
 Mot de passe temporaire admin: $ADMIN_PASSWORD
 Invitation (MVP): https://$DOMAIN/invite/<code>
-Role: $INSTALL_ROLE
 Action requise: connectez-vous puis changez le mot de passe sur /security/change-password
 
 MinIO (object storage):
